@@ -142,6 +142,10 @@ select option{background:var(--card);}
         <option value="سعد">سعد</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>كلمة السر</label>
+      <input type="password" id="loginPass" placeholder="أدخل كلمة السر" onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
     <button class="btn btn-primary" onclick="doLogin()" style="margin-top:8px;">دخول ←</button>
   </div>
 </div>
@@ -332,7 +336,10 @@ select option{background:var(--card);}
     <div class="form-group"><label>ملاحظة</label><input type="text" id="settleNote" placeholder="مثال: تسوية نهاية الأسبوع..."/></div>
     <button class="btn" onclick="doSettlement()" style="background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;">🔒 تأكيد القفل</button>
   </div>
-  <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:9px;">📜 التسويات السابقة</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+    <div style="font-size:13px;font-weight:700;color:var(--accent);">📜 التسويات السابقة</div>
+    <button onclick="exportReport()" style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.3);color:var(--green);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">📄 تصدير تقرير</button>
+  </div>
   <div id="settlementsList"><div class="empty-state"><div class="icon">📭</div>لا توجد تسويات</div></div>
 </div>
 
@@ -363,8 +370,13 @@ var monthStr     = new Date().toISOString().slice(0,7);
 // ============================================================
 // LOGIN
 // ============================================================
+// كلمة السر — غيّرها كما تشاء
+var APP_PASSWORD = '1234';
+
 function doLogin() {
-  var u = document.getElementById('loginUser').value;
+  var u    = document.getElementById('loginUser').value;
+  var pass = document.getElementById('loginPass').value;
+  if (pass !== APP_PASSWORD) { alert('⚠️ كلمة السر غلط'); return; }
   currentUser = u;
   localStorage.setItem('currentUser', u);
   document.getElementById('loginScreen').style.display = 'none';
@@ -733,7 +745,10 @@ function renderSettlement() {
     return '<div class="card" style="border-color:rgba(231,76,60,0.25);margin-bottom:10px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">' +
       '<div style="font-size:13px;font-weight:700;">🔒 '+s.date+'</div>' +
-      '<div style="font-size:10px;color:var(--muted);">'+s.count+' جهاز</div></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<div style="font-size:10px;color:var(--muted);">'+s.count+' جهاز</div>' +
+      '<button class="delete-btn" onclick="deleteSettlement(\''+s.id+'\')" title="حذف التسوية">🗑</button>' +
+      '</div></div>' +
       (s.note?'<div style="font-size:11px;color:var(--muted);margin-bottom:7px;">📝 '+s.note+'</div>':'')+
       '<div class="share-row" style="margin-top:0;padding-top:0;border-top:none;">' +
       '<div class="share-box shop"><div class="sh-val">'+s.shop+'</div><div class="sh-lbl">🏪 محل</div></div>' +
@@ -741,6 +756,82 @@ function renderSettlement() {
       '<div class="share-box saad"><div class="sh-val">'+s.saad+'</div><div class="sh-lbl">👤 سعد</div></div>' +
       '</div></div>';
   }).join('');
+}
+
+function deleteSettlement(id) {
+  if(!confirm('حذف هذه التسوية؟\n\nالأرصدة اللي كانت متضمنة فيها حترجع للحساب الحالي.')) return;
+  db.ref('settlements/'+id).remove();
+}
+
+function exportReport() {
+  var arr = objToArr(records);
+  arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  var warr = objToArr(withdrawals);
+  warr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  var sarr = objToArr(settlements);
+  sarr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+
+  var totalIncome = Math.round(arr.reduce(function(s,r){ return s+n(r.netPrice); },0));
+  var shopTotal   = Math.round(arr.reduce(function(s,r){ return s+n(r.shopShare); },0));
+  var ziadTotal   = Math.round(arr.reduce(function(s,r){ return s+n(r.ziadShare); },0));
+  var saadTotal   = Math.round(arr.reduce(function(s,r){ return s+n(r.saadShare); },0));
+
+  var html = '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">' +
+    '<title>تقرير إدارة السوفتوير</title>' +
+    '<style>body{font-family:Arial,sans-serif;background:#f5f5f5;color:#222;padding:20px;direction:rtl;}' +
+    'h1{color:#1a237e;border-bottom:3px solid #f0a500;padding-bottom:10px;}' +
+    'h2{color:#1a237e;margin-top:24px;font-size:15px;}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}' +
+    'th{background:#1a237e;color:#fff;padding:8px;text-align:right;}' +
+    'td{padding:7px 8px;border-bottom:1px solid #ddd;}' +
+    'tr:nth-child(even){background:#f0f4ff;}' +
+    '.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0;}' +
+    '.box{background:#fff;border-radius:10px;padding:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.08);}' +
+    '.box .val{font-size:22px;font-weight:900;color:#1a237e;}' +
+    '.box .lbl{font-size:11px;color:#666;margin-top:4px;}' +
+    '.shop{border-top:3px solid #f59e0b;}.ziad{border-top:3px solid #3b82f6;}.saad{border-top:3px solid #10b981;}' +
+    '@media print{button{display:none!important;}}' +
+    '</style></head><body>' +
+    '<button onclick="window.print()" style="background:#1a237e;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:16px;">🖨 طباعة / حفظ PDF</button>' +
+    '<h1>📱 تقرير إدارة السوفتوير</h1>' +
+    '<p style="color:#666;font-size:12px;">تاريخ التصدير: '+new Date().toLocaleDateString('ar-EG')+'</p>' +
+    '<h2>📊 ملخص عام</h2>' +
+    '<div class="summary">' +
+    '<div class="box shop"><div class="val">'+shopTotal+'</div><div class="lbl">🏪 المحل (50%)</div></div>' +
+    '<div class="box ziad"><div class="val">'+ziadTotal+'</div><div class="lbl">👤 زياد (30%)</div></div>' +
+    '<div class="box saad"><div class="val">'+saadTotal+'</div><div class="lbl">👤 سعد (20%)</div></div>' +
+    '</div>' +
+    '<p style="font-size:13px;color:#444;">إجمالي الدخل: <strong>'+totalIncome+' SDG</strong> | عدد الأجهزة: <strong>'+arr.length+'</strong></p>' +
+
+    '<h2>📋 سجل الأجهزة</h2>' +
+    '<table><tr><th>الجهاز</th><th>الخدمة</th><th>بواسطة</th><th>التاريخ</th><th>السعر</th><th>محل</th><th>زياد</th><th>سعد</th></tr>' +
+    arr.map(function(r){
+      return '<tr><td>'+r.device+'</td><td>'+r.service+'</td><td>'+r.by+'</td><td>'+r.date+'</td>' +
+        '<td><strong>'+Math.round(n(r.netPrice))+'</strong></td>' +
+        '<td>'+Math.round(n(r.shopShare))+'</td><td>'+Math.round(n(r.ziadShare))+'</td><td>'+Math.round(n(r.saadShare))+'</td></tr>';
+    }).join('') + '</table>' +
+
+    '<h2>💸 المسحوبات</h2>' +
+    '<table><tr><th>من</th><th>المبلغ</th><th>التاريخ</th><th>ملاحظة</th></tr>' +
+    warr.map(function(w){
+      return '<tr><td>'+w.from+'</td><td>'+n(w.amount)+'</td><td>'+w.date+'</td><td>'+(w.note||'')+'</td></tr>';
+    }).join('') + '</table>' +
+
+    (sarr.length ? '<h2>🔒 التسويات</h2>' +
+    '<table><tr><th>التاريخ</th><th>المحل</th><th>زياد</th><th>سعد</th><th>ملاحظة</th></tr>' +
+    sarr.map(function(s){
+      return '<tr><td>'+s.date+'</td><td>'+s.shop+'</td><td>'+s.ziad+'</td><td>'+s.saad+'</td><td>'+(s.note||'')+'</td></tr>';
+    }).join('') + '</table>' : '') +
+
+    '</body></html>';
+
+  var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'تقرير-السوفتوير-'+todayStr+'.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function doSettlement() {
