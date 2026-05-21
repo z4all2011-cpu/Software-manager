@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة السوفتوير</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0d0f14; --surface:#161a22; --card:#1e2330; --border:#2a3040;
+  --accent:#f0a500; --accent2:#e05c2a;
+  --green:#2ecc71; --red:#e74c3c; --blue:#3498db;
+  --text:#e8eaf0; --muted:#6b7280;
+  --ziad:#3b82f6; --saad:#10b981; --shop:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl;}
+
+#loadingScreen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:14px;}
+.spinner{width:46px;height:46px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+header{background:linear-gradient(135deg,#1a1f2e,#0d1117);border-bottom:1px solid var(--border);padding:11px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
+.logo{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+header h1{font-size:15px;font-weight:700;}
+.header-right{margin-right:auto;display:flex;align-items:center;gap:8px;}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;transition:background 0.3s;}
+.sync-dot.syncing{background:var(--accent);animation:pulse 0.8s infinite;}
+.sync-dot.error{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.sync-label{font-size:10px;color:var(--muted);}
+.user-pill{background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--ziad);}
+
+.tabs{display:flex;gap:3px;padding:9px 12px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;}
+.tab-btn{flex-shrink:0;padding:7px 13px;border-radius:8px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:600;background:transparent;color:var(--muted);transition:all 0.2s;}
+.tab-btn.active{background:var(--accent);color:#000;}
+
+.section{display:none;padding:13px;}
+.section.active{display:block;}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:13px;margin-bottom:11px;}
+.card-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:11px;}
+
+.form-group{margin-bottom:9px;}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600;}
+input,select,textarea{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:'Cairo',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;direction:rtl;}
+input:focus,select:focus{border-color:var(--accent);}
+select option{background:var(--card);}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+.btn{padding:10px 16px;border-radius:10px;border:none;cursor:pointer;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;width:100%;}
+.btn-primary{background:var(--accent);color:#000;}
+
+.stats-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:11px;}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:11px 7px;text-align:center;}
+.stat-box .val{font-size:18px;font-weight:900;line-height:1;}
+.stat-box .lbl{font-size:10px;color:var(--muted);margin-top:2px;}
+
+.session-item{background:var(--surface);border:1px solid rgba(240,165,0,0.3);border-radius:11px;padding:11px;margin-bottom:8px;position:relative;overflow:hidden;}
+.session-item::before{content:'';position:absolute;top:0;right:0;width:3px;height:100%;background:var(--accent);}
+.session-timer{font-size:21px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;}
+.session-device{font-size:14px;font-weight:700;margin-bottom:1px;}
+.session-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px;}
+.btn-finish{background:linear-gradient(135deg,var(--green),#27ae60);color:#fff;border:none;border-radius:8px;padding:8px;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+.btn-cancel-sess{background:rgba(231,76,60,0.15);color:var(--red);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:8px;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+
+.record-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:7px;}
+.rec-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;}
+.device-name{font-size:14px;font-weight:700;}
+.rec-price{font-size:16px;font-weight:900;color:var(--green);}
+.rec-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:3px;}
+.tag{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;}
+.tag-ziad{background:rgba(59,130,246,0.2);color:var(--ziad);}
+.tag-saad{background:rgba(16,185,129,0.2);color:var(--saad);}
+.tag-time{background:rgba(255,255,255,0.07);color:var(--muted);}
+.tag-disc{background:rgba(231,76,60,0.15);color:var(--red);}
+.tag-cost{background:rgba(255,138,101,0.15);color:#ff8a65;}
+
+.share-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid var(--border);}
+.share-box{text-align:center;padding:5px;border-radius:7px;}
+.share-box.shop{background:rgba(245,158,11,0.1);}
+.share-box.ziad{background:rgba(59,130,246,0.1);}
+.share-box.saad{background:rgba(16,185,129,0.1);}
+.sh-val{font-size:13px;font-weight:800;}
+.sh-lbl{font-size:9px;color:var(--muted);}
+
+.month-card{background:var(--card);border:1px solid var(--border);border-radius:13px;overflow:hidden;margin-bottom:11px;}
+.month-header{padding:10px 13px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;}
+.month-header.shop-h{background:rgba(245,158,11,0.15);border-bottom:1px solid rgba(245,158,11,0.2);}
+.month-header.ziad-h{background:rgba(59,130,246,0.15);border-bottom:1px solid rgba(59,130,246,0.2);}
+.month-header.saad-h{background:rgba(16,185,129,0.15);border-bottom:1px solid rgba(16,185,129,0.2);}
+.month-body{padding:11px 13px;}
+.balance-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.balance-row:last-child{border-bottom:none;}
+.balance-row .lbl{color:var(--muted);}
+.balance-row .val{font-weight:700;}
+.val-green{color:var(--green);}.val-red{color:var(--red);}.val-yellow{color:var(--accent);}
+
+.withdrawal-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:flex-start;}
+.w-amount{font-size:14px;font-weight:800;color:var(--red);white-space:nowrap;margin-right:9px;}
+.w-note{font-size:11px;color:var(--muted);margin-top:2px;}
+.delete-btn{background:rgba(231,76,60,0.15);border:none;color:var(--red);cursor:pointer;padding:3px 7px;border-radius:6px;font-size:12px;}
+
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;padding:16px 13px;width:100%;max-width:500px;border-top:1px solid var(--border);animation:slideUp 0.25s ease;}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-handle{width:34px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 13px;}
+.modal-title{font-size:15px;font-weight:800;margin-bottom:13px;color:var(--green);}
+
+.empty-state{text-align:center;padding:34px 14px;color:var(--muted);font-size:13px;}
+.empty-state .icon{font-size:30px;margin-bottom:7px;}
+.sessions-empty{text-align:center;padding:26px;color:var(--muted);font-size:13px;}
+.sessions-empty .icon{font-size:28px;margin-bottom:7px;}
+
+/* LOGIN */
+#loginScreen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:998;gap:16px;padding:20px;}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:320px;}
+.login-title{font-size:18px;font-weight:800;text-align:center;margin-bottom:20px;color:var(--accent);}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div style="font-family:'Cairo',sans-serif;color:var(--muted);font-size:13px;">جاري التحميل...</div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none;">
+  <div class="login-card">
+    <div class="login-title">📱 إدارة السوفتوير</div>
+    <div class="form-group">
+      <label>اسمك</label>
+      <select id="loginUser">
+        <option value="زياد">زياد</option>
+        <option value="سعد">سعد</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()" style="margin-top:8px;">دخول ←</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="priceModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modalDeviceName">✅ إضافة السعر</div>
+    <input type="hidden" id="modalSessionId"/>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>السعر الأصلي (SDG)</label>
+        <input type="number" id="modalPrice" placeholder="0" oninput="calcPreview()"/>
+      </div>
+      <div class="form-group">
+        <label>خصم السعر (SDG)</label>
+        <input type="number" id="modalDiscount" placeholder="0" oninput="calcPreview()"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>تكلفة خدمة</label>
+      <select id="modalCostType" onchange="calcPreview()">
+        <option value="">— بدون —</option>
+        <option value="سيرفر">سيرفر</option>
+        <option value="صيانة خارجية">صيانة خارجية</option>
+        <option value="أخرى">أخرى</option>
+      </select>
+    </div>
+    <div id="costAmountRow" style="display:none;" class="form-group">
+      <label>قيمة التكلفة (SDG)</label>
+      <input type="number" id="modalCostAmount" placeholder="0" oninput="calcPreview()"/>
+    </div>
+    <div id="modalPreview" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px;margin-bottom:10px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:5px;display:flex;gap:10px;flex-wrap:wrap;">
+        <span>السعر: <strong id="mp-orig">0</strong></span>
+        <span id="mp-disc-row" style="display:none;">خصم: <strong id="mp-disc-val" style="color:var(--red)">0</strong></span>
+        <span id="mp-cost-row" style="display:none;">تكلفة: <strong id="mp-cost-val" style="color:#ff8a65">0</strong></span>
+      </div>
+      <div class="share-row" style="margin-top:0;padding-top:0;border-top:none;">
+        <div class="share-box shop"><div class="sh-val" id="mp-shop">0</div><div class="sh-lbl">محل 50%</div></div>
+        <div class="share-box ziad"><div class="sh-val" id="mp-ziad">0</div><div class="sh-lbl">زياد 30%</div></div>
+        <div class="share-box saad"><div class="sh-val" id="mp-saad">0</div><div class="sh-lbl">سعد 20%</div></div>
+      </div>
+      <div style="text-align:center;margin-top:7px;font-size:14px;color:var(--accent);font-weight:800;">الصافي: <span id="mp-net">0</span> SDG</div>
+    </div>
+    <div class="form-group"><label>ملاحظة</label><input type="text" id="modalNotes" placeholder="أي ملاحظة..."/></div>
+    <div class="grid-2">
+      <button class="btn-finish" onclick="finishSession()">✅ حفظ وإنهاء</button>
+      <button class="btn-cancel-sess" onclick="closeModal()">← رجوع</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">📱</div>
+  <div><h1>إدارة السوفتوير</h1></div>
+  <div class="header-right">
+    <div class="sync-dot" id="syncDot"></div>
+    <span class="sync-label" id="syncLabel">متصل</span>
+    <div class="user-pill" id="userPill">...</div>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('register',this)">📋 تسجيل</button>
+  <button class="tab-btn" onclick="switchTab('records',this)">📊 السجلات</button>
+  <button class="tab-btn" onclick="switchTab('monthly',this)">📅 الشهر</button>
+  <button class="tab-btn" onclick="switchTab('withdrawals',this)">💸 مسحوبات</button>
+  <button class="tab-btn" onclick="switchTab('settlement',this)" style="color:#e74c3c;">🔒 تسوية</button>
+</div>
+
+<!-- REGISTER -->
+<div id="tab-register" class="section active">
+  <div class="card">
+    <div class="card-title">📱 تسجيل جهاز جديد</div>
+    <div class="form-group"><label>اسم الجهاز</label><input type="text" id="deviceName" placeholder="مثال: Samsung A54"/></div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>نوع الخدمة</label>
+        <select id="serviceType">
+          <option>فلاشة</option><option>فورمات</option><option>فك قفل</option>
+          <option>نسخ احتياطي</option><option>إصلاح IMEI</option><option>أخرى</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>سجّله</label>
+        <select id="registeredBy"><option value="زياد">زياد</option><option value="سعد">سعد</option></select>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="startSession()">▶ ابدأ المؤقت</button>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <div style="font-size:13px;font-weight:700;color:var(--accent);">⏳ أجهزة شغّالة الآن</div>
+    <div id="sessionsCount" style="font-size:11px;color:var(--muted);"></div>
+  </div>
+  <div id="activeSessions"><div class="sessions-empty"><div class="icon">🕐</div>ما في أجهزة شغّالة</div></div>
+</div>
+
+<!-- RECORDS -->
+<div id="tab-records" class="section">
+  <div class="card">
+    <div class="card-title">🔍 فلترة</div>
+    <div class="grid-2">
+      <div class="form-group" style="margin-bottom:0;"><label>فلتر حسب</label>
+        <select id="filterBy" onchange="renderRecords()"><option value="all">الكل</option><option value="زياد">زياد</option><option value="سعد">سعد</option></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="filterDate" onchange="renderRecords()"/></div>
+    </div>
+  </div>
+  <div class="stats-strip">
+    <div class="stat-box"><div class="val" id="st-count" style="color:var(--accent)">0</div><div class="lbl">جهاز</div></div>
+    <div class="stat-box"><div class="val" id="st-total" style="color:var(--green)">0</div><div class="lbl">إجمالي</div></div>
+    <div class="stat-box"><div class="val" id="st-avg" style="color:var(--blue)">0</div><div class="lbl">متوسط</div></div>
+  </div>
+  <div id="recordsList"></div>
+</div>
+
+<!-- MONTHLY -->
+<div id="tab-monthly" class="section">
+  <div class="form-group"><label>اختر الشهر</label>
+    <input type="month" id="monthSelector" onchange="renderMonthly()" style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 11px;width:100%;color:var(--text);font-family:'Cairo',sans-serif;outline:none;"/>
+  </div>
+  <div class="month-card">
+    <div class="month-header shop-h"><span>🏪 المحل</span><span style="color:var(--shop)" id="m-shop-total">0</span></div>
+    <div class="month-body">
+      <div class="balance-row"><span class="lbl">دخل 50%</span><span class="val val-green" id="m-shop-income">0</span></div>
+      <div class="balance-row"><span class="lbl">مسحوبات</span><span class="val val-red" id="m-shop-out">0</span></div>
+      <div class="balance-row"><span class="lbl">صافي</span><span class="val val-yellow" id="m-shop-net">0</span></div>
+    </div>
+  </div>
+  <div class="month-card">
+    <div class="month-header ziad-h"><span>👤 زياد</span><span style="color:var(--ziad)" id="m-ziad-total">0</span></div>
+    <div class="month-body">
+      <div class="balance-row"><span class="lbl">دخل 30%</span><span class="val val-green" id="m-ziad-income">0</span></div>
+      <div class="balance-row"><span class="lbl">مسحوبات</span><span class="val val-red" id="m-ziad-out">0</span></div>
+      <div class="balance-row"><span class="lbl">صافي</span><span class="val val-yellow" id="m-ziad-net">0</span></div>
+    </div>
+  </div>
+  <div class="month-card">
+    <div class="month-header saad-h"><span>👤 سعد</span><span style="color:var(--saad)" id="m-saad-total">0</span></div>
+    <div class="month-body">
+      <div class="balance-row"><span class="lbl">دخل 20%</span><span class="val val-green" id="m-saad-income">0</span></div>
+      <div class="balance-row"><span class="lbl">مسحوبات</span><span class="val val-red" id="m-saad-out">0</span></div>
+      <div class="balance-row"><span class="lbl">صافي</span><span class="val val-yellow" id="m-saad-net">0</span></div>
+    </div>
+  </div>
+  <div class="card" style="border-color:rgba(240,165,0,0.3);">
+    <div class="card-title">📊 إجمالي الشهر</div>
+    <div class="balance-row"><span class="lbl">عدد الأجهزة</span><span class="val" id="m-count">0</span></div>
+    <div class="balance-row"><span class="lbl">إجمالي الدخل</span><span class="val val-green" id="m-total">0</span></div>
+    <div class="balance-row"><span class="lbl">الخصومات</span><span class="val val-red" id="m-disc">0</span></div>
+    <div class="balance-row"><span class="lbl">تكاليف الخدمة</span><span class="val val-red" id="m-costs">0</span></div>
+  </div>
+</div>
+
+<!-- WITHDRAWALS -->
+<div id="tab-withdrawals" class="section">
+  <div class="card">
+    <div class="card-title">➕ إضافة مسحوب</div>
+    <div class="grid-2">
+      <div class="form-group"><label>من حساب</label>
+        <select id="wFrom"><option value="محل">المحل</option><option value="زياد">زياد</option><option value="سعد">سعد</option></select>
+      </div>
+      <div class="form-group"><label>المبلغ (SDG)</label><input type="number" id="wAmount" placeholder="0"/></div>
+    </div>
+    <div class="form-group"><label>التاريخ</label><input type="date" id="wDate"/></div>
+    <div class="form-group"><label>ملاحظة</label><input type="text" id="wNote" placeholder="سبب المسحوب..."/></div>
+    <button class="btn btn-primary" onclick="saveWithdrawal()">💾 حفظ</button>
+  </div>
+  <div style="font-size:12px;font-weight:700;color:var(--shop);margin-bottom:7px;">🏪 مسحوبات المحل</div><div id="wItems-shop"></div>
+  <div style="font-size:12px;font-weight:700;color:var(--ziad);margin:11px 0 7px;">👤 مسحوبات زياد</div><div id="wItems-ziad"></div>
+  <div style="font-size:12px;font-weight:700;color:var(--saad);margin:11px 0 7px;">👤 مسحوبات سعد</div><div id="wItems-saad"></div>
+</div>
+
+<!-- SETTLEMENT -->
+<div id="tab-settlement" class="section">
+  <div class="card" style="border-color:rgba(231,76,60,0.3);">
+    <div class="card-title" style="color:var(--red);">🔒 قفل الحسابات</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:11px;">الأرصدة الحالية منذ آخر تسوية</div>
+    <div class="share-row" style="margin-top:0;padding-top:0;border-top:none;margin-bottom:11px;">
+      <div class="share-box shop"><div class="sh-val" id="sp-shop">0</div><div class="sh-lbl">🏪 المحل</div></div>
+      <div class="share-box ziad"><div class="sh-val" id="sp-ziad">0</div><div class="sh-lbl">👤 زياد</div></div>
+      <div class="share-box saad"><div class="sh-val" id="sp-saad">0</div><div class="sh-lbl">👤 سعد</div></div>
+    </div>
+    <div class="form-group"><label>ملاحظة</label><input type="text" id="settleNote" placeholder="مثال: تسوية نهاية الأسبوع..."/></div>
+    <button class="btn" onclick="doSettlement()" style="background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;">🔒 تأكيد القفل</button>
+  </div>
+  <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:9px;">📜 التسويات السابقة</div>
+  <div id="settlementsList"><div class="empty-state"><div class="icon">📭</div>لا توجد تسويات</div></div>
+</div>
+
+<!-- FIREBASE SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
+var firebaseConfig = {
+  databaseURL: "https://software-manager-408c5-default-rtdb.europe-west1.firebasedatabase.app"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+// ============================================================
+// STATE
+// ============================================================
+var records={}, withdrawals={}, sessions={}, settlements={};
+var lastSettleTs = 0;
+var currentUser  = localStorage.getItem('currentUser') || '';
+var sessionTick  = null;
+var todayStr     = new Date().toISOString().split('T')[0];
+var monthStr     = new Date().toISOString().slice(0,7);
+
+// ============================================================
+// LOGIN
+// ============================================================
+function doLogin() {
+  var u = document.getElementById('loginUser').value;
+  currentUser = u;
+  localStorage.setItem('currentUser', u);
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('userPill').textContent = '👤 ' + u;
+  document.getElementById('registeredBy').value = u;
+  initFirebase();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.onload = function() {
+  document.getElementById('filterDate').value    = todayStr;
+  document.getElementById('wDate').value         = todayStr;
+  document.getElementById('monthSelector').value = monthStr;
+
+  if (!currentUser) {
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display   = 'flex';
+  } else {
+    document.getElementById('userPill').textContent = '👤 ' + currentUser;
+    document.getElementById('registeredBy').value   = currentUser;
+    initFirebase();
+  }
+};
+
+// ============================================================
+// FIREBASE REALTIME LISTENERS - المزامنة الفورية
+// ============================================================
+function initFirebase() {
+  document.getElementById('syncDot').className = 'sync-dot syncing';
+  document.getElementById('syncLabel').textContent = 'جاري الاتصال...';
+
+  // مزامنة فورية للسجلات
+  db.ref('records').on('value', function(snap) {
+    records = snap.val() || {};
+    renderRecords();
+    renderMonthly();
+    renderSettlement();
+  });
+
+  // مزامنة فورية للمسحوبات
+  db.ref('withdrawals').on('value', function(snap) {
+    withdrawals = snap.val() || {};
+    renderWithdrawals();
+    renderMonthly();
+    renderSettlement();
+  });
+
+  // مزامنة فورية للجلسات
+  db.ref('sessions').on('value', function(snap) {
+    sessions = snap.val() || {};
+    renderSessions();
+  });
+
+  // مزامنة فورية للتسويات
+  db.ref('settlements').on('value', function(snap) {
+    settlements = snap.val() || {};
+    // آخر تسوية
+    var all = objToArr(settlements);
+    if (all.length) {
+      all.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+      lastSettleTs = all[0].ts || 0;
+    } else {
+      lastSettleTs = 0;
+    }
+    renderSettlement();
+  });
+
+  // كشف حالة الاتصال
+  db.ref('.info/connected').on('value', function(snap) {
+    if (snap.val()) {
+      document.getElementById('syncDot').className   = 'sync-dot';
+      document.getElementById('syncLabel').textContent = 'متصل';
+      document.getElementById('loadingScreen').style.display = 'none';
+    } else {
+      document.getElementById('syncDot').className   = 'sync-dot error';
+      document.getElementById('syncLabel').textContent = 'غير متصل';
+    }
+  });
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function objToArr(obj) {
+  if (!obj) return [];
+  return Object.values(obj);
+}
+
+function n(v){ return parseFloat(v)||0; }
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(name, btn) {
+  document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name==='records')     renderRecords();
+  if (name==='monthly')     renderMonthly();
+  if (name==='withdrawals') renderWithdrawals();
+  if (name==='settlement')  renderSettlement();
+}
+
+// ============================================================
+// SESSIONS
+// ============================================================
+function startSession() {
+  var device  = document.getElementById('deviceName').value.trim();
+  var service = document.getElementById('serviceType').value;
+  var by      = document.getElementById('registeredBy').value;
+  if (!device){ alert('⚠️ أدخل اسم الجهاز'); return; }
+  var id   = Date.now().toString();
+  var sess = { id:id, date:todayStr, device:device, service:service, by:by, startedAt:Date.now() };
+  db.ref('sessions/'+id).set(sess);
+  document.getElementById('deviceName').value = '';
+}
+
+function renderSessions() {
+  var arr = objToArr(sessions);
+  var el  = document.getElementById('activeSessions');
+  var cnt = document.getElementById('sessionsCount');
+  cnt.textContent = arr.length ? arr.length+' جهاز' : '';
+
+  if (!arr.length) {
+    el.innerHTML = '<div class="sessions-empty"><div class="icon">🕐</div>ما في أجهزة شغّالة</div>';
+    if (sessionTick){ clearInterval(sessionTick); sessionTick=null; }
+    return;
+  }
+
+  el.innerHTML = arr.map(function(s){
+    var elapsed = Math.floor((Date.now()-s.startedAt)/1000);
+    var mm=String(Math.floor(elapsed/60)).padStart(2,'0'), ss=String(elapsed%60).padStart(2,'0');
+    return '<div class="session-item" id="sess-'+s.id+'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+      '<div><div class="session-device">'+s.device+'</div>' +
+      '<div style="font-size:11px;color:var(--muted);">'+s.service+' · <span class="tag tag-'+(s.by==='زياد'?'ziad':'saad')+'">'+s.by+'</span></div></div>' +
+      '<div class="session-timer" id="timer-'+s.id+'">'+mm+':'+ss+'</div></div>' +
+      '<div class="session-actions">' +
+      '<button class="btn-finish" onclick="openModal(\''+s.id+'\')">💰 إضافة السعر</button>' +
+      '<button class="btn-cancel-sess" onclick="cancelSession(\''+s.id+'\')">🗑 إلغاء</button>' +
+      '</div></div>';
+  }).join('');
+
+  if (sessionTick) clearInterval(sessionTick);
+  sessionTick = setInterval(function(){
+    arr.forEach(function(s){
+      var el=document.getElementById('timer-'+s.id); if(!el) return;
+      var elapsed=Math.floor((Date.now()-s.startedAt)/1000);
+      el.textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
+    });
+  }, 1000);
+}
+
+function cancelSession(id) {
+  if (!confirm('إلغاء هذا الجهاز؟')) return;
+  db.ref('sessions/'+id).remove();
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function openModal(id) {
+  var sess = sessions[id];
+  if (!sess) return;
+  document.getElementById('modalSessionId').value        = id;
+  document.getElementById('modalDeviceName').textContent = '✅ '+sess.device;
+  ['modalPrice','modalDiscount','modalCostAmount','modalNotes'].forEach(function(i){ document.getElementById(i).value=''; });
+  document.getElementById('modalCostType').value         = '';
+  document.getElementById('modalPreview').style.display  = 'none';
+  document.getElementById('costAmountRow').style.display = 'none';
+  document.getElementById('priceModal').classList.add('open');
+}
+function closeModal(){ document.getElementById('priceModal').classList.remove('open'); }
+
+function calcPreview() {
+  var orig=n(document.getElementById('modalPrice').value);
+  var disc=n(document.getElementById('modalDiscount').value);
+  var costType=document.getElementById('modalCostType').value;
+  var costAmt=n(document.getElementById('modalCostAmount').value);
+  document.getElementById('costAmountRow').style.display=costType?'block':'none';
+  if(!costType) document.getElementById('modalCostAmount').value='';
+  if(orig>0){
+    var net=orig-disc-costAmt;
+    document.getElementById('modalPreview').style.display='block';
+    document.getElementById('mp-orig').textContent=orig;
+    document.getElementById('mp-disc-row').style.display=disc>0?'inline':'none';
+    document.getElementById('mp-disc-val').textContent=disc;
+    document.getElementById('mp-cost-row').style.display=(costType&&costAmt>0)?'inline':'none';
+    document.getElementById('mp-cost-val').textContent=costAmt;
+    document.getElementById('mp-shop').textContent=Math.round(net*0.5);
+    document.getElementById('mp-ziad').textContent=Math.round(net*0.3);
+    document.getElementById('mp-saad').textContent=Math.round(net*0.2);
+    document.getElementById('mp-net').textContent=Math.round(net);
+  } else { document.getElementById('modalPreview').style.display='none'; }
+}
+
+function finishSession() {
+  var id      = document.getElementById('modalSessionId').value;
+  var orig    = n(document.getElementById('modalPrice').value);
+  var disc    = n(document.getElementById('modalDiscount').value);
+  var costType= document.getElementById('modalCostType').value;
+  var costAmt = n(document.getElementById('modalCostAmount').value);
+  var note    = document.getElementById('modalNotes').value.trim();
+  if(!orig){ alert('⚠️ أدخل السعر'); return; }
+  var sess = sessions[id]; if(!sess) return;
+
+  var ts      = Date.now();
+  var elapsed = Math.floor((ts - sess.startedAt)/60000);
+  var net     = orig - disc - costAmt;
+  var rec = {
+    id:ts, date:sess.date, ts:ts,
+    datetime: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),
+    device:sess.device, service:sess.service, by:sess.by,
+    originalPrice:orig, discount:disc,
+    costType:costType||'', costAmount:costAmt,
+    netPrice:net,
+    shopShare:Math.round(net*0.5), ziadShare:Math.round(net*0.3), saadShare:Math.round(net*0.2),
+    time:elapsed, notes:note
+  };
+  db.ref('records/'+ts).set(rec);
+  db.ref('sessions/'+id).remove();
+  closeModal();
+  alert('✅ تم الحفظ!');
+}
+
+// ============================================================
+// RECORDS
+// ============================================================
+function renderRecords() {
+  var by=document.getElementById('filterBy').value;
+  var dt=document.getElementById('filterDate').value;
+  var arr=objToArr(records);
+  if(dt) arr=arr.filter(function(r){ return r.date===dt; });
+  if(by!=='all') arr=arr.filter(function(r){ return r.by===by; });
+  arr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  var total=arr.reduce(function(s,r){ return s+n(r.netPrice); },0);
+  document.getElementById('st-count').textContent=arr.length;
+  document.getElementById('st-total').textContent=Math.round(total);
+  document.getElementById('st-avg').textContent=arr.length?Math.round(total/arr.length):0;
+  var c=document.getElementById('recordsList');
+  if(!arr.length){ c.innerHTML='<div class="empty-state"><div class="icon">📭</div>لا توجد سجلات</div>'; return; }
+  c.innerHTML=arr.map(function(r){
+    var net=n(r.netPrice), disc=n(r.discount), cost=n(r.costAmount);
+    return '<div class="record-item"><div class="rec-header">' +
+      '<div><div class="device-name">'+r.device+'</div><div class="rec-meta">' +
+      '<span class="tag tag-'+(r.by==='زياد'?'ziad':'saad')+'">'+r.by+'</span>' +
+      '<span class="tag tag-time">⏱ '+r.time+' دق</span>' +
+      '<span class="tag tag-time">🕐 '+r.datetime+'</span>' +
+      '<span class="tag" style="background:rgba(255,255,255,0.07);color:var(--muted);">'+r.service+'</span>' +
+      (disc>0?'<span class="tag tag-disc">خصم '+disc+'</span>':'')+
+      (r.costType?'<span class="tag tag-cost">⚙ '+r.costType+' '+cost+'</span>':'')+
+      '</div></div>' +
+      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">' +
+      '<div class="rec-price">'+Math.round(net)+' SDG</div>' +
+      '<button class="delete-btn" onclick="deleteRecord(\''+r.id+'\')">🗑</button></div></div>' +
+      (r.notes?'<div style="font-size:11px;color:var(--muted);margin-top:3px;">📝 '+r.notes+'</div>':'')+
+      '<div class="share-row">' +
+      '<div class="share-box shop"><div class="sh-val">'+Math.round(r.shopShare)+'</div><div class="sh-lbl">محل 50%</div></div>' +
+      '<div class="share-box ziad"><div class="sh-val">'+Math.round(r.ziadShare)+'</div><div class="sh-lbl">زياد 30%</div></div>' +
+      '<div class="share-box saad"><div class="sh-val">'+Math.round(r.saadShare)+'</div><div class="sh-lbl">سعد 20%</div></div>' +
+      '</div></div>';
+  }).join('');
+}
+
+function deleteRecord(id) {
+  if(!confirm('حذف هذا السجل؟')) return;
+  db.ref('records/'+id).remove();
+}
+
+// ============================================================
+// MONTHLY
+// ============================================================
+function renderMonthly() {
+  var m=document.getElementById('monthSelector').value; if(!m) return;
+  var mr=objToArr(records).filter(function(r){ return r.date&&r.date.startsWith(m); });
+  var mw=objToArr(withdrawals).filter(function(w){ return w.date&&w.date.startsWith(m); });
+  function sum(arr,k){ return Math.round(arr.reduce(function(s,x){ return s+n(x[k]); },0)); }
+  function wsum(who){ return Math.round(mw.filter(function(w){ return w.from===who; }).reduce(function(s,w){ return s+n(w.amount); },0)); }
+  var si=sum(mr,'shopShare'), zi=sum(mr,'ziadShare'), ai=sum(mr,'saadShare');
+  var so=wsum('محل'), zo=wsum('زياد'), ao=wsum('سعد');
+  var f=function(v){ return Math.round(v)+' SDG'; };
+  document.getElementById('m-shop-income').textContent=f(si);
+  document.getElementById('m-shop-out').textContent=f(so);
+  document.getElementById('m-shop-net').textContent=f(si-so);
+  document.getElementById('m-shop-total').textContent=f(si-so);
+  document.getElementById('m-ziad-income').textContent=f(zi);
+  document.getElementById('m-ziad-out').textContent=f(zo);
+  document.getElementById('m-ziad-net').textContent=f(zi-zo);
+  document.getElementById('m-ziad-total').textContent=f(zi-zo);
+  document.getElementById('m-saad-income').textContent=f(ai);
+  document.getElementById('m-saad-out').textContent=f(ao);
+  document.getElementById('m-saad-net').textContent=f(ai-ao);
+  document.getElementById('m-saad-total').textContent=f(ai-ao);
+  document.getElementById('m-count').textContent=mr.length+' جهاز';
+  document.getElementById('m-total').textContent=f(sum(mr,'netPrice'));
+  document.getElementById('m-disc').textContent=f(sum(mr,'discount'));
+  document.getElementById('m-costs').textContent=f(sum(mr,'costAmount'));
+}
+
+// ============================================================
+// WITHDRAWALS
+// ============================================================
+function saveWithdrawal() {
+  var from=document.getElementById('wFrom').value;
+  var amount=n(document.getElementById('wAmount').value);
+  var date=document.getElementById('wDate').value;
+  var note=document.getElementById('wNote').value.trim();
+  if(!amount||!date){ alert('⚠️ أدخل المبلغ والتاريخ'); return; }
+  var ts=Date.now();
+  db.ref('withdrawals/'+ts).set({id:ts, from:from, amount:amount, date:date, note:note, ts:ts});
+  document.getElementById('wAmount').value='';
+  document.getElementById('wNote').value='';
+  alert('✅ تم الحفظ!');
+}
+
+function renderWithdrawals() {
+  ['محل','زياد','سعد'].forEach(function(who){
+    var key=who==='محل'?'shop':who==='زياد'?'ziad':'saad';
+    var items=objToArr(withdrawals).filter(function(w){ return w.from===who; });
+    items.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    var el=document.getElementById('wItems-'+key);
+    if(!items.length){ el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:5px 0;">لا توجد مسحوبات</div>'; return; }
+    var total=items.reduce(function(s,w){ return s+n(w.amount); },0);
+    el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:5px;">الإجمالي: <strong style="color:var(--red)">'+Math.round(total)+' SDG</strong></div>'+
+      items.map(function(w){
+        return '<div class="withdrawal-item"><div class="w-amount">'+n(w.amount)+' SDG</div>' +
+          '<div class="w-info"><div style="font-size:12px;font-weight:600;">'+w.date+'</div>' +
+          (w.note?'<div class="w-note">📝 '+w.note+'</div>':'')+
+          '</div><button class="delete-btn" onclick="deleteWithdrawal(\''+w.id+'\')" style="margin-right:5px;">🗑</button></div>';
+      }).join('');
+  });
+}
+
+function deleteWithdrawal(id) {
+  if(!confirm('حذف هذا المسحوب؟')) return;
+  db.ref('withdrawals/'+id).remove();
+}
+
+// ============================================================
+// SETTLEMENT
+// ============================================================
+function getBalances() {
+  var arr  = objToArr(records).filter(function(r){ return (r.ts||0) > lastSettleTs; });
+  var warr = objToArr(withdrawals).filter(function(w){ return (w.ts||0) > lastSettleTs; });
+  function sum(a,k){ return Math.round(a.reduce(function(s,x){ return s+n(x[k]); },0)); }
+  function wsum(who){ return Math.round(warr.filter(function(w){ return w.from===who; }).reduce(function(s,w){ return s+n(w.amount); },0)); }
+  var si=sum(arr,'shopShare'), zi=sum(arr,'ziadShare'), ai=sum(arr,'saadShare');
+  var so=wsum('محل'), zo=wsum('زياد'), ao=wsum('سعد');
+  return { shop:si-so, ziad:zi-zo, saad:ai-ao,
+    shopIncome:si, ziadIncome:zi, saadIncome:ai,
+    shopOut:so, ziadOut:zo, saadOut:ao, count:arr.length };
+}
+
+function renderSettlement() {
+  var b=getBalances();
+  document.getElementById('sp-shop').textContent=b.shop;
+  document.getElementById('sp-ziad').textContent=b.ziad;
+  document.getElementById('sp-saad').textContent=b.saad;
+  var arr=objToArr(settlements); arr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  var el=document.getElementById('settlementsList');
+  if(!arr.length){ el.innerHTML='<div class="empty-state"><div class="icon">📭</div>لا توجد تسويات</div>'; return; }
+  el.innerHTML=arr.map(function(s){
+    return '<div class="card" style="border-color:rgba(231,76,60,0.25);margin-bottom:10px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">' +
+      '<div style="font-size:13px;font-weight:700;">🔒 '+s.date+'</div>' +
+      '<div style="font-size:10px;color:var(--muted);">'+s.count+' جهاز</div></div>' +
+      (s.note?'<div style="font-size:11px;color:var(--muted);margin-bottom:7px;">📝 '+s.note+'</div>':'')+
+      '<div class="share-row" style="margin-top:0;padding-top:0;border-top:none;">' +
+      '<div class="share-box shop"><div class="sh-val">'+s.shop+'</div><div class="sh-lbl">🏪 محل</div></div>' +
+      '<div class="share-box ziad"><div class="sh-val">'+s.ziad+'</div><div class="sh-lbl">👤 زياد</div></div>' +
+      '<div class="share-box saad"><div class="sh-val">'+s.saad+'</div><div class="sh-lbl">👤 سعد</div></div>' +
+      '</div></div>';
+  }).join('');
+}
+
+function doSettlement() {
+  var b=getBalances();
+  if(b.count===0){ alert('⚠️ ما في سجلات للتسوية'); return; }
+  if(!confirm('تأكيد قفل الحسابات؟\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG\n\n('+b.count+' جهاز)')) return;
+  var note=document.getElementById('settleNote').value.trim();
+  var ts=Date.now();
+  var entry={id:ts, ts:ts, date:todayStr, note:note, count:b.count,
+    shop:b.shop, ziad:b.ziad, saad:b.saad,
+    shopIncome:b.shopIncome, ziadIncome:b.ziadIncome, saadIncome:b.saadIncome,
+    shopOut:b.shopOut, ziadOut:b.ziadOut, saadOut:b.saadOut};
+  db.ref('settlements/'+ts).set(entry);
+  document.getElementById('settleNote').value='';
+  alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
+}
+</script>
+</body>
+</html>
