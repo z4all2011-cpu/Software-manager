@@ -12,7 +12,7 @@ export default {
 
     try {
       const { image } = await request.json();
-      const key = 'AIzaSyAQ.Ab8RN6KpHLu6GjozH0d5iU2Qq1JPYYvokwkSMrhBI3zJoxMrNA';
+      const key = 'AIzaSyAQ.AIzaSyAQ.Ab8RN6IiG7ppSH3vLLIUry1sFoU2AB6duzDyY6NVizRp7w66jA';
 
       const res = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + key,
