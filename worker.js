@@ -12,13 +12,16 @@ export default {
 
     try {
       const { image } = await request.json();
-      const key = 'AIzaSyAQ.AIzaSyAQ.Ab8RN6IiG7ppSH3vLLIUry1sFoU2AB6duzDyY6NVizRp7w66jA';
+      const key = 'AQ.Ab8RN6IiG7ppSH3vLLIUry1sFoU2AB6duzDyY6NVizRp7w66jA';
 
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + key,
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': key
+          },
           body: JSON.stringify({
             contents: [{
               parts: [
@@ -46,7 +49,7 @@ export default {
         if (result.toLowerCase() === 'unknown') result = '';
       }
 
-      return new Response(JSON.stringify({ result }), {
+      return new Response(JSON.stringify({ result, debug: data.error || null }), {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
