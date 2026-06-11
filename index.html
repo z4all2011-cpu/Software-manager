@@ -1149,52 +1149,11 @@ function identifyDevice(event) {
     fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [{
-          image: { content: base64 },
-          features: [
-            { type: 'WEB_DETECTION',   maxResults: 5 },
-            { type: 'TEXT_DETECTION',  maxResults: 1 },
-            { type: 'LABEL_DETECTION', maxResults: 5 }
-          ]
-        }]
-      })
+      body: JSON.stringify({ image: base64 })
     })
     .then(function(r){ return r.json(); })
     .then(function(data) {
-      var result = '';
-      var resp   = data.responses && data.responses[0];
-
-      if (resp && !resp.error) {
-        var web = resp.webDetection;
-
-        // 1. bestGuessLabels — أدق خيار
-        if (web && web.bestGuessLabels && web.bestGuessLabels.length) {
-          result = web.bestGuessLabels[0].label;
-        }
-
-        // 2. webEntities — نفلتر على أسماء الأجهزة
-        if (!result && web && web.webEntities) {
-          var phones = ['samsung','iphone','huawei','xiaomi','oppo','vivo','nokia','lg','sony','motorola','realme','redmi','galaxy','pixel','oneplus','tecno','infinix','itel'];
-          var match = web.webEntities.filter(function(e){
-            if (!e.description || (e.score||0) < 0.4) return false;
-            var d = e.description.toLowerCase();
-            return phones.some(function(p){ return d.indexOf(p) !== -1; });
-          });
-          if (match.length) result = match[0].description;
-          else if (web.webEntities[0] && web.webEntities[0].description) {
-            result = web.webEntities[0].description;
-          }
-        }
-
-        // 3. النص على الجهاز
-        if (!result && resp.textAnnotations && resp.textAnnotations.length) {
-          var lines = (resp.textAnnotations[0].description||'')
-            .split('\n').map(function(l){ return l.trim(); })
-            .filter(function(l){ return l.length > 2; });
-          if (lines.length) result = lines[0];
-        }
-      }
+      var result = data.result || '';
 
       if (result) {
         document.getElementById('deviceName').value = result;
