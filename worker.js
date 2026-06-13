@@ -49,7 +49,7 @@ export default {
         if (result.toLowerCase() === 'unknown') result = '';
       }
 
-      return new Response(JSON.stringify({ result, debug: data.error || null }), {
+      return new Response(JSON.stringify({ result, debug: data }), {
         headers: {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*'
