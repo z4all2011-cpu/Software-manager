@@ -1,4 +1,0 @@
-name = "icy-snow-60ac"
-main = "worker.js"
-compatibility_date = "2026-06-11"
-compatibility_flags = ["nodejs_compat"]
