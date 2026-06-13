@@ -79,7 +79,7 @@ select option{background:var(--card);}
 .share-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid var(--border);}
 .share-box{text-align:center;padding:5px;border-radius:7px;}
 .share-box.shop{background:rgba(245,158,11,0.1);}
-.share-box.ziad{background:rgba(59,130,246,0.1);}
+.share-box.ziad(background:rgba(59,130,246,0.1);}
 .share-box.saad{background:rgba(16,185,129,0.1);}
 .sh-val{font-size:13px;font-weight:800;}
 .sh-lbl{font-size:9px;color:var(--muted);}
@@ -393,7 +393,6 @@ var monthStr     = new Date().toISOString().slice(0,7);
 // ============================================================
 // LOGIN
 // ============================================================
-// كلمة السر — غيّرها كما تشاء
 var APP_PASSWORD = '1234';
 
 function doLogin() {
@@ -427,13 +426,12 @@ window.onload = function() {
 };
 
 // ============================================================
-// FIREBASE REALTIME LISTENERS - المزامنة الفورية
+// FIREBASE REALTIME LISTENERS
 // ============================================================
 function initFirebase() {
   document.getElementById('syncDot').className = 'sync-dot syncing';
   document.getElementById('syncLabel').textContent = 'جاري الاتصال...';
 
-  // مزامنة فورية للسجلات
   db.ref('records').on('value', function(snap) {
     records = snap.val() || {};
     renderRecords();
@@ -441,7 +439,6 @@ function initFirebase() {
     renderSettlement();
   });
 
-  // مزامنة فورية للمسحوبات
   db.ref('withdrawals').on('value', function(snap) {
     withdrawals = snap.val() || {};
     renderWithdrawals();
@@ -449,16 +446,13 @@ function initFirebase() {
     renderSettlement();
   });
 
-  // مزامنة فورية للجلسات
   db.ref('sessions').on('value', function(snap) {
     sessions = snap.val() || {};
     renderSessions();
   });
 
-  // مزامنة فورية للتسويات
   db.ref('settlements').on('value', function(snap) {
     settlements = snap.val() || {};
-    // آخر تسوية
     var all = objToArr(settlements);
     if (all.length) {
       all.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
@@ -469,7 +463,6 @@ function initFirebase() {
     renderSettlement();
   });
 
-  // كشف حالة الاتصال
   db.ref('.info/connected').on('value', function(snap) {
     if (snap.val()) {
       document.getElementById('syncDot').className   = 'sync-dot';
@@ -489,7 +482,6 @@ function objToArr(obj) {
   if (!obj) return [];
   return Object.values(obj);
 }
-
 function n(v){ return parseFloat(v)||0; }
 
 // ============================================================
@@ -509,7 +501,6 @@ function switchTab(name, btn) {
 // ============================================================
 // SESSIONS
 // ============================================================
-// show/hide cost field in register form
 document.getElementById('deviceCostType').addEventListener('change', function(){
   document.getElementById('deviceCostAmountRow').style.display = this.value ? 'block' : 'none';
   if (!this.value) document.getElementById('deviceCostAmount').value = '';
@@ -528,7 +519,12 @@ function startSession() {
   var sess = { id:id, date:todayStr, device:device, service:service, by:by,
     startedAt:Date.now(), price:price, discount:discount, costType:costType, costAmt:costAmt };
   db.ref('sessions/'+id).set(sess);
-  // تصفير الحقول
+
+  // --- إشعار الأندرويد عند بدء المؤقت ---
+  if (window.AndroidNotification) {
+      window.AndroidNotification.showNotification("بدء المؤقت ⏳", "تم بدء العمل على جهاز: " + device);
+  }
+
   document.getElementById('deviceName').value       = '';
   document.getElementById('devicePrice').value      = '';
   document.getElementById('deviceDiscount').value   = '';
@@ -586,7 +582,6 @@ function openModal(id) {
   if (!sess) return;
   document.getElementById('modalSessionId').value        = id;
   document.getElementById('modalDeviceName').textContent = '✅ '+sess.device;
-  // ملء السعر المحفوظ مسبقاً
   document.getElementById('modalPrice').value      = sess.price    || '';
   document.getElementById('modalDiscount').value   = sess.discount || '';
   document.getElementById('modalCostType').value   = sess.costType || '';
@@ -645,6 +640,12 @@ function finishSession() {
   };
   db.ref('records/'+ts).set(rec);
   db.ref('sessions/'+id).remove();
+
+  // --- إشعار الأندرويد عند إنهاء العمل ---
+  if (window.AndroidNotification) {
+      window.AndroidNotification.showNotification("اكتمل العمل ✅", "تم إنهاء وحفظ جهاز: " + sess.device);
+  }
+
   closeModal();
   alert('✅ تم الحفظ!');
 }
@@ -803,7 +804,7 @@ function renderSettlement() {
 }
 
 function deleteSettlement(id) {
-  if(!confirm('حذف هذه التسوية؟\n\nالأرصدة اللي كانت متضمنة فيها حترجع للحساب الحالي.')) return;
+  if(!confirm('حذف هذه التسوية؟\n\nالأرصدة الحالية حترجع للحساب الحالي.')) return;
   db.ref('settlements/'+id).remove();
 }
 
@@ -865,7 +866,7 @@ function exportReport() {
     '<table><tr><th>التاريخ</th><th>المحل</th><th>زياد</th><th>سعد</th><th>ملاحظة</th></tr>' +
     sarr.map(function(s){
       return '<tr><td>'+s.date+'</td><td>'+s.shop+'</td><td>'+s.ziad+'</td><td>'+s.saad+'</td><td>'+(s.note||'')+'</td></tr>';
-    }).join('') + '</table>' : '') +
+    }).join('') : '') +
 
     '</body></html>';
 
@@ -887,7 +888,7 @@ function doSettlement() {
   var entry={id:ts, ts:ts, date:todayStr, note:note, count:b.count,
     shop:b.shop, ziad:b.ziad, saad:b.saad,
     shopIncome:b.shopIncome, ziadIncome:b.ziadIncome, saadIncome:b.saadIncome,
-    shopOut:b.shopOut, ziadOut:b.ziadOut, saadOut:b.saadOut};
+    shopOut:b.shopOut, ziadOut:b.ziadOut, saadOut:ao};
   db.ref('settlements/'+ts).set(entry);
   document.getElementById('settleNote').value='';
   alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
