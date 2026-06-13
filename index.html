@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>إدارة السوفتوير</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <style>
@@ -231,7 +231,7 @@ select option{background:var(--card);}
         <button onclick="openCamera()" style="background:rgba(240,165,0,0.15);border:1px solid rgba(240,165,0,0.3);border-radius:8px;padding:8px 12px;color:var(--accent);font-size:18px;cursor:pointer;flex-shrink:0;" title="تعرف على الجهاز بالكاميرا">📷</button>
       </div>
       <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;" onchange="identifyDevice(event)"/>
-      <div id="cameraStatus" style="display:none;font-size:11px;color:var(--accent);margin-top:5px;text-align:center;"></div>
+      <div id="cameraStatus" style="display:none;font-size:11px;color:var(--accent);margin-top:5px;text-align:center;">🔍 جاري التعرف على الجهاز...</div>
     </div>
     <div class="grid-2">
       <div class="form-group">
@@ -397,6 +397,101 @@ var currentUser  = localStorage.getItem('currentUser') || '';
 var sessionTick  = null;
 var todayStr     = new Date().toISOString().split('T')[0];
 var monthStr     = new Date().toISOString().slice(0,7);
+
+// ============================================================
+// LOGIN
+// ============================================================
+// ============================================================
+// CAMERA & VISION API
+// ============================================================
+var VISION_KEY = 'AIzaSyAOYoKoxY0taykp7eZjuZ7_CGAID5JAvTE';
+
+function openCamera() {
+  document.getElementById('cameraInput').click();
+}
+
+function identifyDevice(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+
+  var status = document.getElementById('cameraStatus');
+  status.style.display = 'block';
+  status.textContent   = '🔍 جاري التعرف على الجهاز...';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    // استخرج base64 بدون الـ prefix
+    var base64 = e.target.result.split(',')[1];
+
+    fetch('https://vision.googleapis.com/v1/images:annotate?key=' + VISION_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{
+          image: { content: base64 },
+          features: [
+            { type: 'WEB_DETECTION',   maxResults: 5 },
+            { type: 'TEXT_DETECTION',  maxResults: 5 },
+            { type: 'LABEL_DETECTION', maxResults: 5 }
+          ]
+        }]
+      })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var result = '';
+      var resp   = data.responses && data.responses[0];
+
+      if (resp) {
+        // أولاً: جرب Web Detection — أدق للأجهزة
+        var web = resp.webDetection;
+        if (web) {
+          // Best guess labels
+          if (web.bestGuessLabels && web.bestGuessLabels.length) {
+            result = web.bestGuessLabels[0].label;
+          }
+          // أو Web Entities
+          if (!result && web.webEntities && web.webEntities.length) {
+            // نفلتر على الكلمات اللي تشبه أسماء أجهزة
+            var entities = web.webEntities.filter(function(e){
+              return e.score > 0.5 && e.description;
+            });
+            if (entities.length) result = entities[0].description;
+          }
+        }
+
+        // ثانياً: جرب النص المكتوب على الجهاز
+        if (!result && resp.textAnnotations && resp.textAnnotations.length) {
+          var text = resp.textAnnotations[0].description || '';
+          // نحاول نستخرج اسم الموديل - عادة أول سطر
+          var lines = text.split('\n').filter(function(l){ return l.trim().length > 2; });
+          if (lines.length) result = lines[0].trim();
+        }
+      }
+
+      if (result) {
+        document.getElementById('deviceName').value = result;
+        status.style.color   = 'var(--green)';
+        status.textContent   = '✅ تم التعرف: ' + result;
+        setTimeout(function(){ status.style.display='none'; }, 3000);
+      } else {
+        status.style.color  = 'var(--red)';
+        status.textContent  = '⚠️ ما قدر يتعرف — أدخل الاسم يدوياً';
+        setTimeout(function(){ status.style.display='none'; }, 3000);
+      }
+      // نظف الـ input للاستخدام التالي
+      document.getElementById('cameraInput').value = '';
+    })
+    .catch(function(err) {
+      console.error('Vision API error:', err);
+      status.style.color  = 'var(--red)';
+      status.textContent  = '⚠️ خطأ في الاتصال';
+      setTimeout(function(){ status.style.display='none'; }, 3000);
+      document.getElementById('cameraInput').value = '';
+    });
+  };
+  reader.readAsDataURL(file);
+}
 
 var APP_PASSWORD = '1234';
 
@@ -895,80 +990,6 @@ function doSettlement() {
   db.ref('settlements/'+ts).set(entry);
   document.getElementById('settleNote').value='';
   alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
-}
-
-// ============================================================
-// CAMERA & VISION API (via Cloudflare proxy)
-// ============================================================
-var PROXY_URL = 'https://vision-proxy.z4all2011.workers.dev/';
-
-function openCamera() {
-  document.getElementById('cameraInput').click();
-}
-
-function identifyDevice(event) {
-  var file = event.target.files[0];
-  if (!file) return;
-
-  var status = document.getElementById('cameraStatus');
-  status.style.display  = 'block';
-  status.style.color    = 'var(--accent)';
-  status.textContent    = '🔍 جاري التعرف على الجهاز...';
-
-  var img = new Image();
-  var url = URL.createObjectURL(file);
-
-  img.onload = function() {
-    // ضغط الصورة
-    var canvas = document.createElement('canvas');
-    var MAX = 1024;
-    var w = img.width, h = img.height;
-    if (w > MAX || h > MAX) {
-      if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
-      else       { w = Math.round(w * MAX/h); h = MAX; }
-    }
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    URL.revokeObjectURL(url);
-
-    var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-    fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64 })
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(data) {
-      var result = data.result || '';
-
-      if (result) {
-        document.getElementById('deviceName').value = result;
-        status.style.color  = 'var(--green)';
-        status.textContent  = '✅ ' + result;
-      } else {
-        status.style.color  = 'var(--red)';
-        status.textContent  = '⚠️ ما تعرف — أدخل الاسم يدوياً';
-      }
-      setTimeout(function(){ status.style.display='none'; }, 4000);
-      document.getElementById('cameraInput').value = '';
-    })
-    .catch(function(err) {
-      console.error(err);
-      status.style.color  = 'var(--red)';
-      status.textContent  = '⚠️ خطأ في الاتصال';
-      setTimeout(function(){ status.style.display='none'; }, 4000);
-      document.getElementById('cameraInput').value = '';
-    });
-  };
-
-  img.onerror = function() {
-    status.style.color  = 'var(--red)';
-    status.textContent  = '⚠️ ما قدر يقرأ الصورة';
-    setTimeout(function(){ status.style.display='none'; }, 3000);
-  };
-
-  img.src = url;
 }
 </script>
 </body>
