@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>إدارة السوفتوير</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <style>
@@ -224,7 +224,22 @@ select option{background:var(--card);}
 <div id="tab-register" class="section active">
   <div class="card">
     <div class="card-title">📱 تسجيل جهاز جديد</div>
-    <div class="form-group"><label>اسم الجهاز</label><input type="text" id="deviceName" placeholder="مثال: Samsung A54"/></div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>اسم الزبون (اختياري)</label>
+        <input type="text" id="customerName" placeholder="اسم الزبون"/>
+      </div>
+      <div class="form-group">
+        <label>رقم التلفون (اختياري)</label>
+        <input type="tel" id="customerPhone" placeholder="09xxxxxxxx"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>اسم الجهاز</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="deviceName" placeholder="مثال: Samsung A54" style="flex:1;"/>
+      </div>
+    </div>
     <div class="grid-2">
       <div class="form-group">
         <label>نوع الخدمة</label>
@@ -273,7 +288,11 @@ select option{background:var(--card);}
 <!-- RECORDS -->
 <div id="tab-records" class="section">
   <div class="card">
-    <div class="card-title">🔍 فلترة</div>
+    <div class="card-title">🔍 فلترة وبحث</div>
+    <div class="form-group">
+      <label>بحث باسم الزبون أو رقمه أو الجهاز</label>
+      <input type="text" id="searchQuery" placeholder="ابحث..." oninput="renderRecords()"/>
+    </div>
     <div class="grid-2">
       <div class="form-group" style="margin-bottom:0;"><label>فلتر حسب</label>
         <select id="filterBy" onchange="renderRecords()"><option value="all">الكل</option><option value="زياد">زياد</option><option value="سعد">سعد</option></select>
@@ -390,10 +409,6 @@ var sessionTick  = null;
 var todayStr     = new Date().toISOString().split('T')[0];
 var monthStr     = new Date().toISOString().slice(0,7);
 
-// ============================================================
-// LOGIN
-// ============================================================
-// كلمة السر — غيّرها كما تشاء
 var APP_PASSWORD = '1234';
 
 function doLogin() {
@@ -405,6 +420,7 @@ function doLogin() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('userPill').textContent = '👤 ' + u;
   document.getElementById('registeredBy').value = u;
+  requestNotificationPermission();
   initFirebase();
 }
 
@@ -449,9 +465,21 @@ function initFirebase() {
     renderSettlement();
   });
 
-  // مزامنة فورية للجلسات
+  // مزامنة فورية للجلسات + إشعارات
+  var prevSessionIds = {};
   db.ref('sessions').on('value', function(snap) {
-    sessions = snap.val() || {};
+    var newSessions = snap.val() || {};
+    // إشعار لما شخص ثاني يضيف جهاز
+    Object.keys(newSessions).forEach(function(id) {
+      if (!prevSessionIds[id]) {
+        var s = newSessions[id];
+        if (s.by !== currentUser) {
+          showNotification('جهاز جديد 📱', s.by + ' سجّل: ' + s.device);
+        }
+      }
+    });
+    prevSessionIds = newSessions;
+    sessions = newSessions;
     renderSessions();
   });
 
@@ -483,8 +511,34 @@ function initFirebase() {
 }
 
 // ============================================================
-// HELPERS
+// NOTIFICATIONS
 // ============================================================
+function showNotification(title, body) {
+  // إشعار داخل التطبيق
+  var notif = document.createElement('div');
+  notif.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:12px 16px;z-index:500;font-family:Cairo,sans-serif;font-size:13px;color:var(--text);text-align:center;min-width:220px;box-shadow:0 4px 20px rgba(0,0,0,0.4);direction:rtl;';
+  notif.innerHTML = '<div style="font-weight:700;color:var(--accent);margin-bottom:3px;">'+title+'</div><div style="color:var(--muted);">'+body+'</div>';
+  document.body.appendChild(notif);
+  setTimeout(function(){ if(notif.parentNode) notif.parentNode.removeChild(notif); }, 4000);
+
+  // إشعار النظام لو مسموح
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body: body, icon: '📱' });
+  }
+}
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+// ============================================================
+// PERMISSIONS - زياد فقط يقدر يحذف تسويات
+// ============================================================
+function canDelete() {
+  return currentUser === 'زياد';
+}
 function objToArr(obj) {
   if (!obj) return [];
   return Object.values(obj);
@@ -523,10 +577,13 @@ function startSession() {
   var discount  = parseFloat(document.getElementById('deviceDiscount').value) || 0;
   var costType  = document.getElementById('deviceCostType').value;
   var costAmt   = parseFloat(document.getElementById('deviceCostAmount').value) || 0;
+  var custName  = document.getElementById('customerName').value.trim();
+  var custPhone = document.getElementById('customerPhone').value.trim();
   if (!device) { alert('⚠️ أدخل اسم الجهاز'); return; }
   var id   = Date.now().toString();
   var sess = { id:id, date:todayStr, device:device, service:service, by:by,
-    startedAt:Date.now(), price:price, discount:discount, costType:costType, costAmt:costAmt };
+    startedAt:Date.now(), price:price, discount:discount, costType:costType, costAmt:costAmt,
+    customerName:custName, customerPhone:custPhone };
   db.ref('sessions/'+id).set(sess);
   // تصفير الحقول
   document.getElementById('deviceName').value       = '';
@@ -534,6 +591,8 @@ function startSession() {
   document.getElementById('deviceDiscount').value   = '';
   document.getElementById('deviceCostType').value   = '';
   document.getElementById('deviceCostAmount').value = '';
+  document.getElementById('customerName').value     = '';
+  document.getElementById('customerPhone').value    = '';
   document.getElementById('deviceCostAmountRow').style.display = 'none';
 }
 
@@ -555,6 +614,7 @@ function renderSessions() {
     return '<div class="session-item" id="sess-'+s.id+'">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
       '<div><div class="session-device">'+s.device+'</div>' +
+      (s.customerName ? '<div style="font-size:11px;color:var(--accent);">👤 '+s.customerName+(s.customerPhone?' · '+s.customerPhone:'')+'</div>' : '') +
       '<div style="font-size:11px;color:var(--muted);">'+s.service+' · <span class="tag tag-'+(s.by==='زياد'?'ziad':'saad')+'">'+s.by+'</span></div></div>' +
       '<div class="session-timer" id="timer-'+s.id+'">'+mm+':'+ss+'</div></div>' +
       '<div class="session-actions">' +
@@ -637,6 +697,8 @@ function finishSession() {
     id:ts, date:sess.date, ts:ts,
     datetime: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),
     device:sess.device, service:sess.service, by:sess.by,
+    customerName: sess.customerName || '',
+    customerPhone: sess.customerPhone || '',
     originalPrice:orig, discount:disc,
     costType:costType||'', costAmount:costAmt,
     netPrice:net,
@@ -655,9 +717,15 @@ function finishSession() {
 function renderRecords() {
   var by=document.getElementById('filterBy').value;
   var dt=document.getElementById('filterDate').value;
+  var q=(document.getElementById('searchQuery').value||'').trim().toLowerCase();
   var arr=objToArr(records);
   if(dt) arr=arr.filter(function(r){ return r.date===dt; });
   if(by!=='all') arr=arr.filter(function(r){ return r.by===by; });
+  if(q) arr=arr.filter(function(r){
+    return (r.device||'').toLowerCase().includes(q) ||
+           (r.customerName||'').toLowerCase().includes(q) ||
+           (r.customerPhone||'').includes(q);
+  });
   arr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
   var total=arr.reduce(function(s,r){ return s+n(r.netPrice); },0);
   document.getElementById('st-count').textContent=arr.length;
@@ -668,7 +736,10 @@ function renderRecords() {
   c.innerHTML=arr.map(function(r){
     var net=n(r.netPrice), disc=n(r.discount), cost=n(r.costAmount);
     return '<div class="record-item"><div class="rec-header">' +
-      '<div><div class="device-name">'+r.device+'</div><div class="rec-meta">' +
+      '<div>' +
+      '<div class="device-name">'+r.device+'</div>' +
+      (r.customerName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:2px;">👤 '+r.customerName+(r.customerPhone?' · <a href="tel:'+r.customerPhone+'" style="color:var(--accent);text-decoration:none;">'+r.customerPhone+'</a>':'')+'</div>' : '') +
+      '<div class="rec-meta">' +
       '<span class="tag tag-'+(r.by==='زياد'?'ziad':'saad')+'">'+r.by+'</span>' +
       '<span class="tag tag-time">⏱ '+r.time+' دق</span>' +
       '<span class="tag tag-time">🕐 '+r.datetime+'</span>' +
@@ -803,6 +874,7 @@ function renderSettlement() {
 }
 
 function deleteSettlement(id) {
+  if (!canDelete()) { alert('⚠️ صلاحية الحذف لزياد فقط'); return; }
   if(!confirm('حذف هذه التسوية؟\n\nالأرصدة اللي كانت متضمنة فيها حترجع للحساب الحالي.')) return;
   db.ref('settlements/'+id).remove();
 }
@@ -891,6 +963,80 @@ function doSettlement() {
   db.ref('settlements/'+ts).set(entry);
   document.getElementById('settleNote').value='';
   alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
+}
+
+// ============================================================
+// CAMERA & VISION API (via Cloudflare proxy)
+// ============================================================
+var PROXY_URL = 'https://vision-proxy.z4all2011.workers.dev/';
+
+function openCamera() {
+  document.getElementById('cameraInput').click();
+}
+
+function identifyDevice(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+
+  var status = document.getElementById('cameraStatus');
+  status.style.display  = 'block';
+  status.style.color    = 'var(--accent)';
+  status.textContent    = '🔍 جاري التعرف على الجهاز...';
+
+  var img = new Image();
+  var url = URL.createObjectURL(file);
+
+  img.onload = function() {
+    // ضغط الصورة
+    var canvas = document.createElement('canvas');
+    var MAX = 1024;
+    var w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      if (w > h) { h = Math.round(h * MAX/w); w = MAX; }
+      else       { w = Math.round(w * MAX/h); h = MAX; }
+    }
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+
+    var base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+    fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64 })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var result = data.result || '';
+
+      if (result) {
+        document.getElementById('deviceName').value = result;
+        status.style.color  = 'var(--green)';
+        status.textContent  = '✅ ' + result;
+      } else {
+        status.style.color  = 'var(--red)';
+        status.textContent  = '⚠️ ما تعرف — أدخل الاسم يدوياً';
+      }
+      setTimeout(function(){ status.style.display='none'; }, 4000);
+      document.getElementById('cameraInput').value = '';
+    })
+    .catch(function(err) {
+      console.error(err);
+      status.style.color  = 'var(--red)';
+      status.textContent  = '⚠️ خطأ في الاتصال';
+      setTimeout(function(){ status.style.display='none'; }, 4000);
+      document.getElementById('cameraInput').value = '';
+    });
+  };
+
+  img.onerror = function() {
+    status.style.color  = 'var(--red)';
+    status.textContent  = '⚠️ ما قدر يقرأ الصورة';
+    setTimeout(function(){ status.style.display='none'; }, 3000);
+  };
+
+  img.src = url;
 }
 </script>
 </body>
