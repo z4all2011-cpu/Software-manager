@@ -119,6 +119,22 @@ select option{background:var(--card);}
 .login-title{font-size:18px;font-weight:800;text-align:center;margin-bottom:20px;color:var(--accent);}
 .login-error{color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none;padding:8px;background:rgba(231,76,60,0.1);border-radius:8px;}
 
+/* STATUS BADGES */
+.status-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;cursor:pointer;}
+.status-received{background:rgba(107,114,128,0.2);color:#9ca3af;border:1px solid rgba(107,114,128,0.3);}
+.status-working{background:rgba(245,158,11,0.2);color:var(--accent);border:1px solid rgba(245,158,11,0.3);}
+.status-ready{background:rgba(59,130,246,0.2);color:var(--ziad);border:1px solid rgba(59,130,246,0.3);}
+.status-delivered{background:rgba(46,204,113,0.2);color:var(--green);border:1px solid rgba(46,204,113,0.3);}
+
+/* CHAT */
+.chat-bubble{padding:8px 11px;border-radius:12px;font-size:12px;max-width:80%;margin-bottom:6px;line-height:1.5;}
+.chat-bubble.me{background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.2);margin-right:auto;border-bottom-right-radius:3px;}
+.chat-bubble.other{background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.2);margin-left:auto;border-bottom-left-radius:3px;}
+.chat-meta{font-size:9px;color:var(--muted);margin-top:2px;}
+.chat-wrap{display:flex;flex-direction:column;}
+.chat-wrap.me{align-items:flex-start;}
+.chat-wrap.other{align-items:flex-end;}
+
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
@@ -220,6 +236,7 @@ select option{background:var(--card);}
   <button class="tab-btn" onclick="switchTab('monthly',this)">📅 الشهر</button>
   <button class="tab-btn" onclick="switchTab('withdrawals',this)">💸 مسحوبات</button>
   <button class="tab-btn" onclick="switchTab('settlement',this)" style="color:#e74c3c;">🔒 تسوية</button>
+  <button class="tab-btn" onclick="switchTab('chat',this)">💬 داخلي</button>
 </div>
 
 <!-- REGISTER -->
@@ -365,6 +382,23 @@ select option{background:var(--card);}
   <div style="font-size:12px;font-weight:700;color:var(--shop);margin-bottom:7px;">🏪 مسحوبات المحل</div><div id="wItems-shop"></div>
   <div style="font-size:12px;font-weight:700;color:var(--ziad);margin:11px 0 7px;">👤 مسحوبات زياد</div><div id="wItems-ziad"></div>
   <div style="font-size:12px;font-weight:700;color:var(--saad);margin:11px 0 7px;">👤 مسحوبات سعد</div><div id="wItems-saad"></div>
+</div>
+
+<!-- CHAT -->
+<div id="tab-chat" class="section">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:13px;overflow:hidden;margin-bottom:11px;">
+    <div style="padding:10px 13px;background:rgba(59,130,246,0.1);border-bottom:1px solid var(--border);font-size:13px;font-weight:700;">
+      💬 ملاحظات داخلية — زياد وسعد
+    </div>
+    <div id="chatMessages" style="height:320px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:4px;">
+      <div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">لا توجد رسائل بعد</div>
+    </div>
+    <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
+      <input type="text" id="chatInput" placeholder="اكتب ملاحظة..." style="flex:1;" onkeydown="if(event.key==='Enter') sendChat()"/>
+      <button onclick="sendChat()" style="background:var(--ziad);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;">إرسال</button>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);text-align:center;">الرسائل مرئية لزياد وسعد فقط</div>
 </div>
 
 <!-- SETTLEMENT -->
@@ -546,6 +580,12 @@ function initFirebase() {
   });
   dbListeners.push(settRef);
 
+  var chatRef = db.ref('chat');
+  chatRef.on('value', function(snap){
+    renderChat(snap.val() || {});
+  });
+  dbListeners.push(chatRef);
+
   db.ref('.info/connected').on('value', function(snap){
     if (snap.val()){
       document.getElementById('syncDot').className    = 'sync-dot';
@@ -593,6 +633,65 @@ function switchTab(name, btn) {
   if (name==='monthly')     renderMonthly();
   if (name==='withdrawals') renderWithdrawals();
   if (name==='settlement')  renderSettlement();
+  if (name==='chat')        scrollChatToBottom();
+}
+
+// ============================================================
+// DEVICE STATUS
+// ============================================================
+function setStatus(sessionId, status) {
+  db.ref('sessions/'+sessionId+'/status').set(status);
+  // إشعار للطرف الثاني
+  var sess = sessions[sessionId];
+  if (sess && sess.by !== currentUser) {
+    showNotification('تحديث حالة 📱', sess.device + ' ← ' + status);
+  }
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+function sendChat() {
+  var input = document.getElementById('chatInput');
+  var text  = input.value.trim();
+  if (!text) return;
+  var ts = Date.now();
+  db.ref('chat/'+ts).set({
+    id: ts, ts: ts, text: text, by: currentUser,
+    time: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})
+  });
+  input.value = '';
+}
+
+function renderChat(chatData) {
+  var arr = objToArr(chatData);
+  arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  var el = document.getElementById('chatMessages');
+  if (!arr.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">لا توجد رسائل بعد</div>';
+    return;
+  }
+  el.innerHTML = arr.map(function(m) {
+    var isMe = m.by === currentUser;
+    var color = m.by === 'زياد' ? 'var(--ziad)' : 'var(--saad)';
+    return '<div class="chat-wrap '+(isMe?'me':'other')+'">' +
+      '<div class="chat-bubble '+(isMe?'me':'other')+'">'+m.text+'</div>' +
+      '<div class="chat-meta" style="color:'+color+';">'+m.by+' · '+m.time+'</div>' +
+      '</div>';
+  }).join('');
+  scrollChatToBottom();
+  // إشعار برسالة جديدة
+  if (arr.length && arr[arr.length-1].by !== currentUser) {
+    var last = arr[arr.length-1];
+    if (Date.now() - last.ts < 5000) {
+      showNotification('رسالة من '+last.by+' 💬', last.text);
+    }
+  }
+}
+
+function scrollChatToBottom() {
+  var el = document.getElementById('chatMessages');
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
 // ============================================================
@@ -646,6 +745,15 @@ function renderSessions() {
       '<div class="session-actions">' +
       '<button class="btn-finish" onclick="openModal(\''+s.id+'\')">💰 إضافة السعر</button>' +
       '<button class="btn-cancel-sess" onclick="cancelSession(\''+s.id+'\')">🗑 إلغاء</button>' +
+      '</div>' +
+      '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+      '<span style="font-size:10px;color:var(--muted);">الحالة:</span>' +
+      ['استلم','شغّال','جاهز','سُلّم'].map(function(st){
+        var cls=['received','working','ready','delivered'];
+        var idx=['استلم','شغّال','جاهز','سُلّم'].indexOf(st);
+        var active=(s.status||'استلم')===st?'border-width:2px;':'';
+        return '<span class="status-badge status-'+cls[idx]+'" style="'+active+'" onclick="setStatus(\''+s.id+'\',\''+st+'\')">'+st+'</span>';
+      }).join('')+
       '</div></div>';
   }).join('');
   if (sessionTick) clearInterval(sessionTick);
