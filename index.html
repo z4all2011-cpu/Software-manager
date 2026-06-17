@@ -425,6 +425,7 @@ select option{background:var(--card);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 
 <script>
 // ============================================================
@@ -440,8 +441,12 @@ var firebaseConfig = {
   appId: "1:905460059114:web:a08a44f61ebb1fc8e24093"
 };
 firebase.initializeApp(firebaseConfig);
-var db   = firebase.database();
-var auth = firebase.auth();
+var db        = firebase.database();
+var auth      = firebase.auth();
+var messaging = null;
+
+// VAPID Key من Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+var VAPID_KEY = 'BDi9xPXTzyUT1Ti2PLBcYGzRS-oxuQkO34PIcfgcaw_LJ6v75M3nFzrzdLFAMseYhrlM0KFXPb4Ju8sNZaJyBBg';
 
 // خريطة: اسم المستخدم → إيميل Firebase Auth
 var USER_EMAILS = {
@@ -522,6 +527,7 @@ window.onload = function() {
       document.getElementById('userPill').textContent      = '👤 ' + currentUser + ' ← خروج';
       document.getElementById('registeredBy').value        = currentUser;
       requestNotificationPermission();
+      checkPendingNotifications();
       initFirebase();
     } else {
       currentUser = '';
@@ -611,12 +617,77 @@ function showNotification(title, body) {
   setTimeout(function(){ if(notif.parentNode) notif.parentNode.removeChild(notif); }, 4000);
 }
 function requestNotificationPermission(){
-  if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+  if (!('Notification' in window)) return;
+  Notification.requestPermission().then(function(permission) {
+    if (permission === 'granted') {
+      initFCM();
+    }
+  });
 }
 
-// ============================================================
-// HELPERS
-// ============================================================
+function initFCM() {
+  if (!firebase.messaging.isSupported()) return;
+  try {
+    messaging = firebase.messaging();
+    // تسجيل Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then(function(reg) {
+          messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg })
+            .then(function(token) {
+              if (token && currentUser) {
+                // حفظ التوكن في Firebase مرتبط بالمستخدم
+                db.ref('fcm_tokens/' + currentUser).set({
+                  token: token,
+                  updatedAt: Date.now()
+                });
+              }
+            })
+            .catch(function(err){ console.log('FCM token error:', err); });
+        })
+        .catch(function(err){ console.log('SW register error:', err); });
+    }
+    // استقبال الإشعارات لما التطبيق مفتوح
+    messaging.onMessage(function(payload) {
+      var title = payload.notification.title || 'إدارة السوفتوير';
+      var body  = payload.notification.body  || '';
+      showNotification(title, body);
+    });
+  } catch(e) {
+    console.log('FCM init error:', e);
+  }
+}
+
+// إرسال إشعار FCM للمستخدم الثاني عبر Firebase Function أو مباشرة
+function sendPushToOther(title, body) {
+  var other = currentUser === 'زياد' ? 'سعد' : 'زياد';
+  // نحفظ الإشعار في Firebase — السيرفر أو Cloud Function يرسله
+  // في حال ما في Cloud Function، التطبيق يقرأه لما يفتح
+  var ts = Date.now();
+  db.ref('pending_notifications/' + other + '/' + ts).set({
+    title: title, body: body, ts: ts, from: currentUser
+  });
+}
+
+// استقبال الإشعارات المعلّقة لما يفتح التطبيق
+function checkPendingNotifications() {
+  if (!currentUser) return;
+  db.ref('pending_notifications/' + currentUser).once('value', function(snap) {
+    var pending = snap.val();
+    if (!pending) return;
+    var arr = objToArr(pending);
+    arr.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    // عرض آخر إشعار فقط
+    if (arr.length) {
+      var last = arr[arr.length-1];
+      if (Date.now() - last.ts < 3600000) { // خلال ساعة
+        showNotification(last.title, last.body);
+      }
+    }
+    // مسح الإشعارات المستلمة
+    db.ref('pending_notifications/' + currentUser).remove();
+  });
+}
 function canDelete(){ return currentUser === 'زياد'; }
 function objToArr(obj){ return obj ? Object.values(obj) : []; }
 function n(v){ return parseFloat(v)||0; }
@@ -641,10 +712,9 @@ function switchTab(name, btn) {
 // ============================================================
 function setStatus(sessionId, status) {
   db.ref('sessions/'+sessionId+'/status').set(status);
-  // إشعار للطرف الثاني
   var sess = sessions[sessionId];
-  if (sess && sess.by !== currentUser) {
-    showNotification('تحديث حالة 📱', sess.device + ' ← ' + status);
+  if (sess) {
+    sendPushToOther('تحديث حالة 📱', sess.device + ' ← ' + status);
   }
 }
 
@@ -660,6 +730,7 @@ function sendChat() {
     id: ts, ts: ts, text: text, by: currentUser,
     time: new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})
   });
+  sendPushToOther('رسالة من ' + currentUser + ' 💬', text);
   input.value = '';
 }
 
@@ -717,6 +788,7 @@ function startSession() {
   db.ref('sessions/'+id).set({id:id,date:todayStr,device:device,service:service,by:by,
     startedAt:Date.now(),price:price,discount:discount,costType:costType,costAmt:costAmt,
     customerName:custName,customerPhone:custPhone});
+  sendPushToOther('جهاز جديد 📱', by + ' سجّل: ' + device + ' (' + service + ')');
   ['deviceName','devicePrice','deviceDiscount','deviceCostAmount','customerName','customerPhone']
     .forEach(function(i){ document.getElementById(i).value=''; });
   document.getElementById('deviceCostType').value='';
