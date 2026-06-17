@@ -818,13 +818,30 @@ function renderSessions() {
       '<button class="btn-finish" onclick="openModal(\''+s.id+'\')">💰 إضافة السعر</button>' +
       '<button class="btn-cancel-sess" onclick="cancelSession(\''+s.id+'\')">🗑 إلغاء</button>' +
       '</div>' +
-      '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
-      '<span style="font-size:10px;color:var(--muted);">الحالة:</span>' +
+      '<div style="margin-top:8px;">' +
+      '<div style="font-size:10px;color:var(--muted);margin-bottom:5px;">الحالة:</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;">' +
       ['استلم','شغّال','جاهز','سُلّم'].map(function(st){
-        var cls=['received','working','ready','delivered'];
-        var idx=['استلم','شغّال','جاهز','سُلّم'].indexOf(st);
-        var active=(s.status||'استلم')===st?'border-width:2px;':'';
-        return '<span class="status-badge status-'+cls[idx]+'" style="'+active+'" onclick="setStatus(\''+s.id+'\',\''+st+'\')">'+st+'</span>';
+        var colors  = {
+          'استلم':  {bg:'rgba(107,114,128,0.15)', color:'#9ca3af', activeBg:'rgba(107,114,128,0.5)',  activeColor:'#fff'},
+          'شغّال':  {bg:'rgba(245,158,11,0.15)',  color:'#f59e0b', activeBg:'rgba(245,158,11,0.85)', activeColor:'#000'},
+          'جاهز':   {bg:'rgba(59,130,246,0.15)',  color:'#3b82f6', activeBg:'rgba(59,130,246,0.85)', activeColor:'#fff'},
+          'سُلّم':  {bg:'rgba(46,204,113,0.15)',  color:'#2ecc71', activeBg:'rgba(46,204,113,0.85)', activeColor:'#000'}
+        };
+        var emojis  = {'استلم':'📥','شغّال':'⚙️','جاهز':'✅','سُلّم':'🤝'};
+        var current = s.status || 'استلم';
+        var isActive = current === st;
+        var c = colors[st];
+        var bg    = isActive ? c.activeBg    : c.bg;
+        var color = isActive ? c.activeColor : c.color;
+        var shadow = isActive ? 'box-shadow:0 0 0 2px '+c.activeBg+';' : '';
+        var weight = isActive ? '800' : '600';
+        var scale  = isActive ? 'transform:scale(1.05);' : '';
+        return '<div onclick="setStatus(\''+s.id+'\',\''+st+'\')" style="'+
+          'background:'+bg+';color:'+color+';text-align:center;padding:7px 3px;border-radius:9px;'+
+          'font-family:Cairo,sans-serif;font-size:11px;font-weight:'+weight+';cursor:pointer;'+
+          'transition:all 0.2s;'+shadow+scale+
+          '">'+emojis[st]+'<br>'+st+'</div>';
       }).join('')+
       '</div></div>';
   }).join('');
