@@ -441,11 +441,33 @@ select option{background:var(--card);}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
     <div style="font-size:13px;font-weight:700;color:var(--accent);">📜 التسويات السابقة</div>
     <div style="display:flex;gap:6px;">
-      <button onclick="exportShopReport()" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:var(--accent);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">🏪 تقرير المحل</button>
+      <button onclick="openShopReportModal()" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:var(--accent);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">🏪 تقرير المحل</button>
       <button onclick="exportReport()" style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.3);color:var(--green);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">📄 تقرير كامل</button>
     </div>
   </div>
   <div id="settlementsList"><div class="empty-state"><div class="icon">📭</div>لا توجد تسويات</div></div>
+</div>
+
+<!-- SHOP REPORT MODAL -->
+<div class="modal-overlay" id="shopReportModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" style="color:var(--accent);">🏪 تقرير المحل</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>من تاريخ</label>
+        <input type="date" id="shopReportFrom"/>
+      </div>
+      <div class="form-group">
+        <label>إلى تاريخ</label>
+        <input type="date" id="shopReportTo"/>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:4px;">
+      <button class="btn-finish" onclick="exportShopReport()">📥 تصدير</button>
+      <button class="btn-cancel-sess" onclick="document.getElementById('shopReportModal').classList.remove('open')">← رجوع</button>
+    </div>
+  </div>
 </div>
 
 <!-- FIREBASE SDK -->
@@ -1141,9 +1163,23 @@ function doSettlement(){
   alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
 }
 
+function openShopReportModal(){
+  var now = new Date();
+  var firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  document.getElementById('shopReportFrom').value = firstDay;
+  document.getElementById('shopReportTo').value   = todayStr;
+  document.getElementById('shopReportModal').classList.add('open');
+}
+
 function exportShopReport(){
-  var recs = objToArr(records);
-  var wds  = objToArr(withdrawals);
+  var from = document.getElementById('shopReportFrom').value;
+  var to   = document.getElementById('shopReportTo').value;
+  if (!from || !to){ alert('⚠️ اختر التاريخ من وإلى'); return; }
+  if (from > to){ alert('⚠️ تاريخ البداية لازم يكون قبل النهاية'); return; }
+  document.getElementById('shopReportModal').classList.remove('open');
+
+  var recs = objToArr(records).filter(function(r){ return r.date >= from && r.date <= to; });
+  var wds  = objToArr(withdrawals).filter(function(w){ return w.date >= from && w.date <= to; });
   recs.sort(function(a,b){ return a.date===b.date ? (a.ts||0)-(b.ts||0) : a.date>b.date?1:-1; });
 
   // مسحوبات المحل فقط مرتبة بالتاريخ
@@ -1202,7 +1238,7 @@ function exportShopReport(){
 
     '<button onclick="window.print()" style="background:#92400e;color:#fff;border:none;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:12px;margin-bottom:14px;">🖨 طباعة / حفظ PDF</button>' +
     '<h1>🏪 تقرير المحل — إدارة السوفتوير</h1>' +
-    '<div class="meta">تاريخ الإصدار: '+new Date().toLocaleDateString('ar-EG')+' | إجمالي الفترة منذ البداية</div>' +
+    '<div class="meta">📅 الفترة: <strong>'+from+'</strong> → <strong>'+to+'</strong> &nbsp;|&nbsp; تاريخ الإصدار: '+new Date().toLocaleDateString('ar-EG')+'</div>' +
 
     '<h2>📊 ملخص عام</h2>' +
     '<div class="summary-strip">' +
@@ -1276,7 +1312,7 @@ function exportShopReport(){
   var url  = URL.createObjectURL(blob);
   var a    = document.createElement('a');
   a.href   = url;
-  a.download = 'تقرير-المحل-'+todayStr+'.html';
+  a.download = 'تقرير-المحل-'+from+'-الى-'+to+'.html';
   a.click();
   URL.revokeObjectURL(url);
 }
