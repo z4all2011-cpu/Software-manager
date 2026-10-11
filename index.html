@@ -414,9 +414,33 @@ select option{background:var(--card);}
     <div class="form-group"><label>ملاحظة</label><input type="text" id="settleNote" placeholder="مثال: تسوية نهاية الأسبوع..."/></div>
     <button class="btn" onclick="doSettlement()" style="background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;">🔒 تأكيد القفل</button>
   </div>
+  <!-- تصدير بالتاريخ -->
+  <div class="card" style="border-color:rgba(46,204,113,0.3);">
+    <div class="card-title" style="color:var(--green);">📄 تصدير السجل بالتاريخ</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>من تاريخ</label>
+        <input type="date" id="exportFrom"/>
+      </div>
+      <div class="form-group">
+        <label>إلى تاريخ</label>
+        <input type="date" id="exportTo"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>تصفية حسب</label>
+      <select id="exportFilter">
+        <option value="all">الكل (زياد وسعد)</option>
+        <option value="زياد">زياد فقط</option>
+        <option value="سعد">سعد فقط</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="exportByDate()" style="background:linear-gradient(135deg,var(--green),#27ae60);color:#000;">📥 تصدير التقرير</button>
+  </div>
+
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
     <div style="font-size:13px;font-weight:700;color:var(--accent);">📜 التسويات السابقة</div>
-    <button onclick="exportReport()" style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.3);color:var(--green);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">📄 تصدير تقرير</button>
+    <button onclick="exportReport()" style="background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.3);color:var(--green);padding:5px 12px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;">📄 تقرير كامل</button>
   </div>
   <div id="settlementsList"><div class="empty-state"><div class="icon">📭</div>لا توجد تسويات</div></div>
 </div>
@@ -703,7 +727,16 @@ function switchTab(name, btn) {
   if (name==='records')     renderRecords();
   if (name==='monthly')     renderMonthly();
   if (name==='withdrawals') renderWithdrawals();
-  if (name==='settlement')  renderSettlement();
+  if (name==='settlement'){
+    renderSettlement();
+    // تعيين أول وآخر يوم في الشهر الحالي كقيم افتراضية
+    if (!document.getElementById('exportFrom').value){
+      var now = new Date();
+      var firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      document.getElementById('exportFrom').value = firstDay;
+      document.getElementById('exportTo').value   = todayStr;
+    }
+  }
   if (name==='chat')        scrollChatToBottom();
 }
 
@@ -1103,6 +1136,157 @@ function doSettlement(){
     shopOut:b.shopOut,ziadOut:b.ziadOut,saadOut:b.saadOut});
   document.getElementById('settleNote').value='';
   alert('✅ تم القفل!\n\n🏪 المحل: '+b.shop+' SDG\n👤 زياد: '+b.ziad+' SDG\n👤 سعد: '+b.saad+' SDG');
+}
+
+function exportByDate(){
+  var from   = document.getElementById('exportFrom').value;
+  var to     = document.getElementById('exportTo').value;
+  var filter = document.getElementById('exportFilter').value;
+
+  if (!from || !to){ alert('⚠️ اختر التاريخ من وإلى'); return; }
+  if (from > to){ alert('⚠️ تاريخ البداية لازم يكون قبل النهاية'); return; }
+
+  // فلترة السجلات
+  var recs = objToArr(records).filter(function(r){
+    return r.date >= from && r.date <= to && (filter==='all' || r.by===filter);
+  });
+  recs.sort(function(a,b){ return a.date===b.date ? (a.ts||0)-(b.ts||0) : a.date>b.date?1:-1; });
+
+  // فلترة المسحوبات
+  var wds = objToArr(withdrawals).filter(function(w){
+    return w.date >= from && w.date <= to;
+  });
+  wds.sort(function(a,b){ return a.date===b.date ? (a.ts||0)-(b.ts||0) : a.date>b.date?1:-1; });
+
+  if (!recs.length && !wds.length){ alert('⚠️ لا توجد بيانات في هذه الفترة'); return; }
+
+  // حساب الإجماليات
+  var totalNet  = Math.round(recs.reduce(function(s,r){ return s+n(r.netPrice); },0));
+  var totalShop = Math.round(recs.reduce(function(s,r){ return s+n(r.shopShare); },0));
+  var totalZiad = Math.round(recs.reduce(function(s,r){ return s+n(r.ziadShare); },0));
+  var totalSaad = Math.round(recs.reduce(function(s,r){ return s+n(r.saadShare); },0));
+  var totalDisc = Math.round(recs.reduce(function(s,r){ return s+n(r.discount); },0));
+  var totalCost = Math.round(recs.reduce(function(s,r){ return s+n(r.costAmount); },0));
+  var totalWShop= Math.round(wds.filter(function(w){ return w.from==='محل'; }).reduce(function(s,w){ return s+n(w.amount); },0));
+  var totalWZiad= Math.round(wds.filter(function(w){ return w.from==='زياد'; }).reduce(function(s,w){ return s+n(w.amount); },0));
+  var totalWSaad= Math.round(wds.filter(function(w){ return w.from==='سعد'; }).reduce(function(s,w){ return s+n(w.amount); },0));
+
+  // دمج السجلات والمسحوبات في جدول زمني واحد
+  var timeline = [];
+  recs.forEach(function(r){ timeline.push({type:'record', date:r.date, ts:r.ts||0, data:r}); });
+  wds.forEach(function(w){ timeline.push({type:'withdrawal', date:w.date, ts:w.ts||0, data:w}); });
+  timeline.sort(function(a,b){ return a.date===b.date ? a.ts-b.ts : a.date>b.date?1:-1; });
+
+  var filterLabel = filter==='all' ? 'زياد وسعد' : filter;
+  var html = '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">' +
+    '<title>تقرير '+from+' — '+to+'</title>' +
+    '<style>' +
+    'body{font-family:Arial,sans-serif;background:#f5f5f5;color:#222;padding:16px;direction:rtl;font-size:13px;}' +
+    'h1{color:#1a237e;border-bottom:3px solid #f0a500;padding-bottom:8px;font-size:18px;}' +
+    'h2{color:#1a237e;margin-top:20px;font-size:14px;border-right:4px solid #f0a500;padding-right:8px;}' +
+    '.meta{color:#666;font-size:11px;margin-bottom:16px;}' +
+    '.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0;}' +
+    '.box{background:#fff;border-radius:8px;padding:12px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.08);}' +
+    '.box .val{font-size:20px;font-weight:900;color:#1a237e;}.box .lbl{font-size:10px;color:#666;margin-top:3px;}' +
+    '.shop{border-top:3px solid #f59e0b;}.ziad{border-top:3px solid #3b82f6;}.saad{border-top:3px solid #10b981;}' +
+    'table{width:100%;border-collapse:collapse;margin-top:10px;}' +
+    'th{background:#1a237e;color:#fff;padding:7px 8px;text-align:right;font-size:12px;}' +
+    'td{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top;}' +
+    'tr.rec-row:nth-child(even){background:#f0f4ff;}' +
+    'tr.rec-row:nth-child(odd){background:#fff;}' +
+    'tr.wd-row{background:#fff8f0;}' +
+    '.date-sep{background:#e8eaf6;font-weight:700;color:#3949ab;padding:5px 8px;font-size:11px;}' +
+    '.tag-ziad{background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:10px;font-size:10px;}' +
+    '.tag-saad{background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:10px;font-size:10px;}' +
+    '.tag-wd{background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:10px;font-size:10px;}' +
+    '.net-pos{color:#15803d;font-weight:700;}.net-neg{color:#b91c1c;font-weight:700;}' +
+    '.totals-row{background:#e8eaf6;font-weight:700;}' +
+    '@media print{button{display:none!important;}body{padding:8px;}}' +
+    '</style></head><body>' +
+
+    '<button onclick="window.print()" style="background:#1a237e;color:#fff;border:none;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:12px;margin-bottom:14px;">🖨 طباعة / حفظ PDF</button>' +
+    '<h1>📊 تقرير إدارة السوفتوير</h1>' +
+    '<div class="meta">📅 الفترة: <strong>'+from+'</strong> → <strong>'+to+'</strong> &nbsp;|&nbsp; 👤 <strong>'+filterLabel+'</strong> &nbsp;|&nbsp; تاريخ الإصدار: '+new Date().toLocaleDateString('ar-EG')+'</div>' +
+
+    '<h2>📊 ملخص الفترة</h2>' +
+    '<div class="summary">' +
+    '<div class="box shop"><div class="val">'+totalShop+'</div><div class="lbl">🏪 المحل (50%)</div></div>' +
+    '<div class="box ziad"><div class="val">'+totalZiad+'</div><div class="lbl">👤 زياد (30%)</div></div>' +
+    '<div class="box saad"><div class="val">'+totalSaad+'</div><div class="lbl">👤 سعد (20%)</div></div>' +
+    '</div>' +
+    '<table style="margin-bottom:16px;"><tr>' +
+    '<td><strong>عدد الأجهزة:</strong> '+recs.length+'</td>' +
+    '<td><strong>إجمالي الدخل:</strong> <span class="net-pos">'+totalNet+' SDG</span></td>' +
+    '<td><strong>الخصومات:</strong> <span class="net-neg">'+totalDisc+' SDG</span></td>' +
+    '<td><strong>التكاليف:</strong> <span class="net-neg">'+totalCost+' SDG</span></td>' +
+    '</tr></table>' +
+
+    (wds.length ? '<table style="margin-bottom:16px;"><tr>' +
+    '<td><strong>مسحوبات المحل:</strong> <span class="net-neg">'+totalWShop+' SDG</span></td>' +
+    '<td><strong>مسحوبات زياد:</strong> <span class="net-neg">'+totalWZiad+' SDG</span></td>' +
+    '<td><strong>مسحوبات سعد:</strong> <span class="net-neg">'+totalWSaad+' SDG</span></td>' +
+    '</tr></table>' : '') +
+
+    '<h2>📋 السجل التفصيلي (مرتب بالتاريخ)</h2>' +
+    '<table>' +
+    '<tr><th>التاريخ</th><th>البيان</th><th>الخدمة</th><th>بواسطة</th><th>السعر</th><th>محل</th><th>زياد</th><th>سعد</th><th>ملاحظة</th></tr>';
+
+  var lastDate = '';
+  timeline.forEach(function(item){
+    if (item.date !== lastDate){
+      lastDate = item.date;
+      html += '<tr><td colspan="9" class="date-sep">📅 '+item.date+'</td></tr>';
+    }
+    if (item.type === 'record'){
+      var r = item.data;
+      var byTag = r.by==='زياد' ? '<span class="tag-ziad">زياد</span>' : '<span class="tag-saad">سعد</span>';
+      var note = [];
+      if (n(r.discount)>0) note.push('خصم: '+n(r.discount));
+      if (r.costType) note.push(r.costType+': '+n(r.costAmount));
+      if (r.notes) note.push(r.notes);
+      html += '<tr class="rec-row">' +
+        '<td>'+r.datetime+'</td>' +
+        '<td><strong>'+r.device+'</strong>'+(r.customerName?'<br><span style="font-size:10px;color:#666;">'+r.customerName+(r.customerPhone?' · '+r.customerPhone:'')+'</span>':'')+'</td>' +
+        '<td>'+r.service+'</td>' +
+        '<td>'+byTag+'</td>' +
+        '<td class="net-pos">'+Math.round(n(r.netPrice))+'</td>' +
+        '<td>'+Math.round(n(r.shopShare))+'</td>' +
+        '<td>'+Math.round(n(r.ziadShare))+'</td>' +
+        '<td>'+Math.round(n(r.saadShare))+'</td>' +
+        '<td style="font-size:10px;color:#666;">'+note.join(' | ')+'</td>' +
+        '</tr>';
+    } else {
+      var w = item.data;
+      html += '<tr class="wd-row">' +
+        '<td>—</td>' +
+        '<td><strong>💸 مسحوب</strong></td>' +
+        '<td>—</td>' +
+        '<td><span class="tag-wd">'+w.from+'</span></td>' +
+        '<td class="net-neg">−'+n(w.amount)+'</td>' +
+        '<td colspan="3" style="color:#666;font-size:11px;">'+(w.note||'—')+'</td>' +
+        '<td></td>' +
+        '</tr>';
+    }
+  });
+
+  // سطر الإجماليات
+  html += '<tr class="totals-row">' +
+    '<td colspan="4">الإجمالي</td>' +
+    '<td class="net-pos">'+totalNet+'</td>' +
+    '<td>'+totalShop+'</td>' +
+    '<td>'+totalZiad+'</td>' +
+    '<td>'+totalSaad+'</td>' +
+    '<td></td></tr>';
+
+  html += '</table></body></html>';
+
+  var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'تقرير-'+from+'-الى-'+to+'.html';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportReport(){
